@@ -55,6 +55,14 @@ module tb_pcap_dpi;
     wire trk_msg_done;
     wire trk_ack_ok;
 
+    wire tcp_evt;
+    wire tcp_syn_ok;
+    wire tcp_synack_ok;
+    wire tcp_hs_done;
+    wire tcp_seq_err;
+    wire tcp_op_err;
+    wire tcp_sess_full;
+
     int pkt_len;
     int pkt_wire;
     int dlt;
@@ -67,6 +75,7 @@ module tb_pcap_dpi;
     int n_ipv4, n_non_ipv4, n_truncated;
     int n_tcp, n_udp, n_roce;
     int n_msg, n_ack, n_psn_err, n_op_err;
+    int n_hs, n_tcp_seq_err, n_tcp_op_err;
     bit pace;
     int pace_max_us;
     int idle_cyc;
@@ -178,6 +187,29 @@ module tb_pcap_dpi;
         .ack_ok(trk_ack_ok)
     );
 
+    pkt_tcp_tracker #(
+        .NUM_SESS(4)
+    ) u_tcp (
+        .clk(clk),
+        .rst_n(rst_n),
+        .hdr_valid(hdr_valid),
+        .is_tcp(hdr_is_tcp),
+        .src_ip(src_ip),
+        .dst_ip(dst_ip),
+        .src_port(src_port),
+        .dst_port(dst_port),
+        .seq(tcp_seq),
+        .ack(tcp_ackn),
+        .flags(tcp_flags),
+        .evt_valid(tcp_evt),
+        .syn_ok(tcp_syn_ok),
+        .synack_ok(tcp_synack_ok),
+        .hs_done(tcp_hs_done),
+        .seq_err(tcp_seq_err),
+        .op_err(tcp_op_err),
+        .sess_full(tcp_sess_full)
+    );
+
     always #5 clk = ~clk;
 
     always @(posedge clk) begin
@@ -250,6 +282,28 @@ module tb_pcap_dpi;
         end
     end
 
+    always @(posedge clk) begin
+        if (rst_n && tcp_evt) begin
+            if (tcp_hs_done)      n_hs          = n_hs + 1;
+            if (tcp_seq_err)      n_tcp_seq_err = n_tcp_seq_err + 1;
+            if (tcp_op_err)       n_tcp_op_err  = n_tcp_op_err + 1;
+            if (tcp_sess_full)
+                $display("[TCP] SESS_FULL");
+            else if (tcp_seq_err)
+                $display("[TCP] SEQ_ERR");
+            else if (tcp_op_err)
+                $display("[TCP] OP_ERR");
+            else if (tcp_hs_done)
+                $display("[TCP] HS_DONE");
+            else if (tcp_synack_ok)
+                $display("[TCP] SYNACK_OK");
+            else if (tcp_syn_ok)
+                $display("[TCP] SYN_OK");
+            else
+                $display("[TCP] OK");
+        end
+    end
+
     initial begin
         $dumpfile("simulation_trace.vcd");
         $dumpvars(0, tb_pcap_dpi);
@@ -276,6 +330,9 @@ module tb_pcap_dpi;
         n_ack = 0;
         n_psn_err = 0;
         n_op_err = 0;
+        n_hs = 0;
+        n_tcp_seq_err = 0;
+        n_tcp_op_err = 0;
         max_packets = 8;
         pace_arg = 0;
         pace = 1'b0;
@@ -369,6 +426,8 @@ module tb_pcap_dpi;
                  n_ipv4, n_tcp, n_udp, n_roce, n_non_ipv4, n_truncated);
         $display("[DUT] Tracker msg=%0d  ack=%0d  psn_err=%0d  op_err=%0d",
                  n_msg, n_ack, n_psn_err, n_op_err);
+        $display("[DUT] TCP     hs=%0d  seq_err=%0d  op_err=%0d",
+                 n_hs, n_tcp_seq_err, n_tcp_op_err);
         $finish;
         end
     end

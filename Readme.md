@@ -30,6 +30,7 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 | `pkt_size_filter.sv` | Frame length: runt (&lt;64), standard, jumbo (&gt;1500) |
 | `pkt_header_parser.sv` | L2–L4 parse; TCP flags/seq; Soft-RoCE BTH (opcode, QP, PSN, P_Key, AckReq) |
 | `pkt_roce_tracker.sv` | RoCE session CAM: PSN sequence, MSG_DONE, ACK_OK |
+| `pkt_tcp_tracker.sv` | TCP 4-tuple CAM: SYN / SYN-ACK / HS_DONE |
 | `pcap_reader.c` | Offline `libpcap` reader: bytes, wire length, timestamp, DLT |
 | `traffic.pcap` | Local iperf TCP trace (not in git) |
 | `soft_roce.pcap` | Local Soft-RoCEv2 trace from `scripts/soft_roce_veth.sh` |
@@ -43,6 +44,7 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 .pcap  ->  libpcap (DPI-C)  ->  testbench byte stream  ->  pkt_size_filter
                                                          ->  pkt_header_parser
                                                          ->  pkt_roce_tracker
+                                                         ->  pkt_tcp_tracker
 ```
 
 1. `open_pcap()` opens the file named by `+PCAP=`; `get_datalink()` reports the capture DLT.
@@ -51,6 +53,7 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 4. `pkt_size_filter` counts `tvalid` beats and pulses `pkt_done` with length class.
 5. `pkt_header_parser` latches MAC, EtherType, IPv4, L4 ports, TCP sequence/flags, and RoCE BTH (opcode, P_Key, AckReq, dest QP, PSN).
 6. `pkt_roce_tracker` follows Send First/Middle/Last PSN per `{src,dst,qp}` and matches the reverse-direction ACK.
+7. `pkt_tcp_tracker` follows SYN / SYN-ACK / ACK and pulses `HS_DONE` when the handshake seq/ack match.
 
 ## Build and run
 
@@ -77,9 +80,16 @@ One `[HDR]` line is printed when headers are valid (after L4 ports for TCP/UDP).
 [SV] Datalink DLT=1 (Ethernet)
 [SV] Processing Packet #1 (captured 74 / wire 74 bytes) ts=1788332455.060537
 [HDR] ... IPv4  192.168.1.1:42262 -> 192.168.1.2:5201  TCP SYN seq=0x5803f137 ack=0x00000000
+[TCP] SYN_OK
 [DUT] Classified packet: 74 bytes -> STANDARD
 [SV] Processing Packet #2 ...
 [HDR] ... IPv4  192.168.1.2:5201 -> 192.168.1.1:42262  TCP SYN ACK seq=0x15c9e53f ack=0x5803f138
+[TCP] SYNACK_OK
+...
+[TCP] HS_DONE
+...
+[DUT] Header  ipv4=8  tcp=8  udp=0  roce=0  other=0  trunc=0
+[DUT] TCP     hs=1  seq_err=0  op_err=0
 [SV] Processing Packet #2 (captured 74 / wire 74 bytes) ts=1788332455.060565
 [HDR] ... IPv4  192.168.1.2:5201 -> 192.168.1.1:42262  TCP
 ...
@@ -121,7 +131,7 @@ Capture a new file with `sudo ./scripts/soft_roce_veth.sh setup` then `demo` (`d
 - L2/L3: MAC, EtherType, IPv4
 - L4: TCP/UDP ports; TCP flags, seq, ack
 - RoCEv2 BTH: opcode, dest QP, PSN, P_Key, AckReq
-- Tracker: PSN sequence per session, message complete, ACK match
+- Tracker: RoCE PSN/ACK; TCP handshake (SYN / SYN-ACK / HS_DONE)
 - Replay: optional `+PACE=1` IFG from pcap timestamps (capped)
 
 ## License

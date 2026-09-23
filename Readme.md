@@ -25,6 +25,7 @@ Ensure you have **Verilator** installed (Verified on version 5.032+).
 * `pcap_reader.c` - Native C program using `libpcap` to parse raw binary network packets offline.
 * `traffic.pcap` - Local packet trace (keep out of git; jumbo captures can be multi-GB).
 * `simulation.log` - Output log file mapping packet records.
+* `docs/gtkwave_8pkt.jpg` - GTKWave capture of an 8-packet IPv4 replay.
 
 ##  Architecture & Data Flow
 1. **Initialization:** The SystemVerilog testbench invokes `open_pcap()` via DPI-C.
@@ -95,7 +96,11 @@ A healthy replay prints one `[HDR]` line when L2/L3 fields are ready (byte 33 fo
 [DUT] Header  ipv4=8  non-ipv4=0  truncated=0
 ```
 
-In GTKWave, each `tvalid` burst is one frame: `tstart` on the first beat, `tlast` on the last, `hdr_valid` one cycle after byte 33, `pkt_done` one cycle after `tlast`. `dst_mac` / `src_mac` / `src_ip` / `dst_ip` hold until the next packet overwrites them. At millisecond zoom `clk` looks solid; zoom into one burst to see the 10 ns clock.
+![GTKWave 8-packet replay](docs/gtkwave_8pkt.jpg)
+
+Eight `tvalid` bursts (~6 µs). `hdr_valid` ticks inside each burst; `pkt_done` follows `tlast`. Dest/src MAC swap each reply; `ethertype` stays `0x0800`; `dst_ip` / `src_ip` toggle between `C0A80101` (`192.168.1.1`) and `C0A80102` (`192.168.1.2`).
+
+In GTKWave, each `tvalid` burst is one frame: `tstart` on the first beat, `tlast` on the last, `hdr_valid` one cycle after byte 33, `pkt_done` one cycle after `tlast`. `dst_mac` / `src_mac` / `src_ip` / `dst_ip` hold until the next packet overwrites them. At this zoom `clk` looks solid; zoom into one burst to see the 10 ns clock.
 
 ##  Progressive Roadmap
 

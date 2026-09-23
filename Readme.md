@@ -28,7 +28,7 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 | `Makefile` | Compile, run, waveforms, clean |
 | `tb_pcap_dpi.sv` | Testbench: DPI imports, stream driver, plusargs |
 | `pkt_size_filter.sv` | Frame length: runt (&lt;64), standard, jumbo (&gt;1500) |
-| `pkt_header_parser.sv` | L2–L4 parse; TCP / UDP / Soft-RoCE flags |
+| `pkt_header_parser.sv` | L2–L4 parse; TCP / UDP / Soft-RoCE BTH (opcode, QP, PSN) |
 | `pcap_reader.c` | Offline `libpcap` reader (`caplen` bytes) |
 | `traffic.pcap` | Local iperf TCP trace (not in git) |
 | `soft_roce.pcap` | Local Soft-RoCEv2 trace from `scripts/soft_roce_veth.sh` |
@@ -47,7 +47,7 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 2. Packets are replayed up to `+MAX_PACKETS=` (default 8).
 3. Bytes are updated on the clock negedge and sampled by the DUT on posedge.
 4. `pkt_size_filter` counts `tvalid` beats and pulses `pkt_done` with length class.
-5. `pkt_header_parser` latches MAC, EtherType, IPv4 addresses, and L4 ports. UDP destination or source port 4791 (or EtherType 0x8915) sets `is_roce`; TCP sets `is_tcp`.
+5. `pkt_header_parser` latches MAC, EtherType, IPv4, and L4 ports. UDP port 4791 (or EtherType 0x8915) sets `is_roce` and, for RoCEv2, BTH opcode, dest QP, and PSN.
 
 ## Build and run
 
@@ -81,9 +81,20 @@ make PCAP=soft_roce.pcap
 make PCAP=soft_roce.pcap MAX_PACKETS=16
 ```
 
-Frames to UDP/4791 are tagged `ROCE`. 1082-byte frames are RC Send; 62-byte frames are RC Ack and are also marked runt (&lt;64). Full logs and a GTKWave capture are in `examples/`.
+UDP/4791 frames are tagged `ROCE` with BTH opcode, dest QP, and PSN. A pingpong message is Send First/Middle/Last then Ack; the 62-byte Ack is also runt (<64). Full log: `examples/soft_roce_8pkt.log`.
 
-Capture a new Soft-RoCE file with `sudo ./scripts/soft_roce_veth.sh setup` then `demo` (`docs/soft_roce_veth.md`).
+```
+[HDR] ... 192.168.10.1:49441 -> 192.168.10.2:4791  ROCE SEND_FIRST qp=0x11 psn=0xe1b96c
+[HDR] ... 192.168.10.1:49441 -> 192.168.10.2:4791  ROCE SEND_MIDDLE qp=0x11 psn=0xe1b96d
+[HDR] ... 192.168.10.1:49441 -> 192.168.10.2:4791  ROCE SEND_MIDDLE qp=0x11 psn=0xe1b96e
+[HDR] ... 192.168.10.1:49441 -> 192.168.10.2:4791  ROCE SEND_LAST qp=0x11 psn=0xe1b96f
+[HDR] ... 192.168.10.2:49441 -> 192.168.10.1:4791  ROCE ACK qp=0x11 psn=0xe1b96f
+[DUT] Classified packet: 62 bytes ->     RUNT
+...
+[DUT] Header  ipv4=8  tcp=0  udp=0  roce=8  other=0  trunc=0
+```
+
+Capture a new file with `sudo ./scripts/soft_roce_veth.sh setup` then `demo` (`docs/soft_roce_veth.md`).
 
 ## Status
 
@@ -91,7 +102,8 @@ Capture a new Soft-RoCE file with `sudo ./scripts/soft_roce_veth.sh setup` then 
 - Control: packet cap and clean exit
 - Size filter: runt / standard / jumbo
 - L2/L3: MAC, EtherType, IPv4
-- L4: TCP/UDP ports; Soft-RoCE classified on UDP/4791 (BTH not parsed)
+- L4: TCP/UDP ports; Soft-RoCE on UDP/4791
+- RoCEv2 BTH: opcode (SEND_FIRST/MIDDLE/LAST, ACK, …), dest QP, PSN
 
 ## License
 

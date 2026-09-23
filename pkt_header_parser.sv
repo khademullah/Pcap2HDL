@@ -25,7 +25,10 @@ module pkt_header_parser (
     output logic [31:0] dst_ip,
     output logic [7:0]  ip_proto,
     output logic [15:0] src_port,
-    output logic [15:0] dst_port
+    output logic [15:0] dst_port,
+    output logic [7:0]  bth_opcode,
+    output logic [23:0] dest_qp,
+    output logic [23:0] bth_psn
 );
 
     localparam logic [15:0] ETYPE_IPV4   = 16'h0800;
@@ -43,6 +46,8 @@ module pkt_header_parser (
     logic [15:0] etype_now;
     logic [15:0] l4_off;
     logic [15:0] l4_last;
+    logic [15:0] bth_off;
+    logic [15:0] bth_last;
     logic        needs_ports;
     logic [15:0] dst_port_now;
     logic        roce_now;
@@ -52,6 +57,8 @@ module pkt_header_parser (
         etype_now    = (cur_idx == 16'd13) ? {ethertype[15:8], tdata} : ethertype;
         l4_off       = 16'd14 + {10'd0, ip_ihl, 2'b00};
         l4_last      = l4_off + 16'd3;
+        bth_off      = l4_off + 16'd8;
+        bth_last     = bth_off + 16'd11;
         needs_ports  = (ip_proto == PROTO_TCP) || (ip_proto == PROTO_UDP);
         dst_port_now = (cur_idx == l4_last) ? {dst_port[15:8], tdata} : dst_port;
         roce_now     = (etype_now == ETYPE_ROCEV1) ||
@@ -80,6 +87,9 @@ module pkt_header_parser (
             ip_proto     <= 8'd0;
             src_port     <= 16'd0;
             dst_port     <= 16'd0;
+            bth_opcode   <= 8'd0;
+            dest_qp      <= 24'd0;
+            bth_psn      <= 24'd0;
         end else begin
             hdr_valid <= 1'b0;
 
@@ -103,6 +113,9 @@ module pkt_header_parser (
                     ip_proto     <= 8'd0;
                     src_port     <= 16'd0;
                     dst_port     <= 16'd0;
+                    bth_opcode   <= 8'd0;
+                    dest_qp      <= 24'd0;
+                    bth_psn      <= 24'd0;
                 end else begin
                     byte_idx <= cur_idx;
                 end
@@ -144,6 +157,20 @@ module pkt_header_parser (
                         dst_port[15:8] <= tdata;
                     else if (cur_idx == (l4_off + 16'd3))
                         dst_port[7:0]  <= tdata;
+                    else if (cur_idx == bth_off)
+                        bth_opcode <= tdata;
+                    else if (cur_idx == (bth_off + 16'd5))
+                        dest_qp[23:16] <= tdata;
+                    else if (cur_idx == (bth_off + 16'd6))
+                        dest_qp[15:8]  <= tdata;
+                    else if (cur_idx == (bth_off + 16'd7))
+                        dest_qp[7:0]   <= tdata;
+                    else if (cur_idx == (bth_off + 16'd9))
+                        bth_psn[23:16] <= tdata;
+                    else if (cur_idx == (bth_off + 16'd10))
+                        bth_psn[15:8]  <= tdata;
+                    else if (cur_idx == (bth_off + 16'd11))
+                        bth_psn[7:0]   <= tdata;
                 end
 
                 if (cur_idx == 16'd13)
@@ -154,13 +181,17 @@ module pkt_header_parser (
                         emit_hdr(1'b0, 1'b1, 1'b0);
                     end else if (cur_idx == 16'd13 && tlast) begin
                         emit_hdr(1'b0, 1'b0, 1'b1);
-                    end else if (saw_ipv4 && needs_ports && cur_idx == l4_last) begin
+                    end else if (saw_ipv4 && needs_ports && !roce_now && cur_idx == l4_last) begin
+                        emit_hdr(1'b1, 1'b0, 1'b0);
+                    end else if (saw_ipv4 && roce_now && cur_idx == bth_last) begin
                         emit_hdr(1'b1, 1'b0, 1'b0);
                     end else if (saw_ipv4 && !needs_ports && cur_idx == 16'd33) begin
                         emit_hdr(1'b1, 1'b0, 1'b0);
                     end else if (tlast && cur_idx < 16'd13) begin
                         emit_hdr(1'b0, 1'b0, 1'b1);
-                    end else if (tlast && saw_ipv4 && needs_ports && cur_idx < l4_last) begin
+                    end else if (tlast && saw_ipv4 && roce_now && cur_idx < bth_last) begin
+                        emit_hdr(1'b0, 1'b0, 1'b1);
+                    end else if (tlast && saw_ipv4 && needs_ports && !roce_now && cur_idx < l4_last) begin
                         emit_hdr(1'b0, 1'b0, 1'b1);
                     end else if (tlast && saw_ipv4 && !needs_ports && cur_idx < 16'd33) begin
                         emit_hdr(1'b0, 1'b0, 1'b1);

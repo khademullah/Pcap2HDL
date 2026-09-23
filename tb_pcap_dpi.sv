@@ -35,6 +35,9 @@ module tb_pcap_dpi;
     wire [7:0]  ip_proto;
     wire [15:0] src_port;
     wire [15:0] dst_port;
+    wire [7:0]  bth_opcode;
+    wire [23:0] dest_qp;
+    wire [23:0] bth_psn;
 
     int pkt_len;
     int i;
@@ -44,6 +47,24 @@ module tb_pcap_dpi;
     int n_ipv4, n_non_ipv4, n_truncated;
     int n_tcp, n_udp, n_roce;
     string pcap_name;
+
+    function automatic string bth_opname(input logic [7:0] op);
+        case (op)
+            8'h00: bth_opname = "SEND_FIRST";
+            8'h01: bth_opname = "SEND_MIDDLE";
+            8'h02: bth_opname = "SEND_LAST";
+            8'h03: bth_opname = "SEND_LAST_IMM";
+            8'h04: bth_opname = "SEND_ONLY";
+            8'h05: bth_opname = "SEND_ONLY_IMM";
+            8'h06: bth_opname = "WRITE_FIRST";
+            8'h07: bth_opname = "WRITE_MIDDLE";
+            8'h08: bth_opname = "WRITE_LAST";
+            8'h0A: bth_opname = "WRITE_ONLY";
+            8'h0C: bth_opname = "READ_REQ";
+            8'h11: bth_opname = "ACK";
+            default: bth_opname = $sformatf("OP_0x%02h", op);
+        endcase
+    endfunction
 
     pkt_size_filter #(
         .JUMBO_THRESH(1500),
@@ -83,7 +104,10 @@ module tb_pcap_dpi;
         .dst_ip(dst_ip),
         .ip_proto(ip_proto),
         .src_port(src_port),
-        .dst_port(dst_port)
+        .dst_port(dst_port),
+        .bth_opcode(bth_opcode),
+        .dest_qp(dest_qp),
+        .bth_psn(bth_psn)
     );
 
     always #5 clk = ~clk;
@@ -124,7 +148,8 @@ module tb_pcap_dpi;
                                         "NON-IPv4",
                      src_ip[31:24], src_ip[23:16], src_ip[15:8], src_ip[7:0], src_port,
                      dst_ip[31:24], dst_ip[23:16], dst_ip[15:8], dst_ip[7:0], dst_port,
-                     hdr_is_roce ? "ROCE" :
+                     hdr_is_roce ? $sformatf("ROCE %s qp=0x%0h psn=0x%0h",
+                                             bth_opname(bth_opcode), dest_qp, bth_psn) :
                      hdr_is_tcp  ? "TCP"  :
                      hdr_is_udp  ? "UDP"  : "");
         end

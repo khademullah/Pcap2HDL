@@ -1,114 +1,98 @@
+<p align="center">
+  <img src="docs/pcap2hdl-logo.png" alt="Pcap2HDL" width="280">
+</p>
+
 # Pcap2HDL
-A high-performance, progressive hardware-software verification environment that bridges **software network traces** with **hardware description languages (HDL)**. This project leverages SystemVerilog Direct Programming Interface (DPI-C) to stream raw binary `.pcap` files directly into a clock-cycle accurate Verilog hardware simulation using **Verilator**.
-##  Purpose & Value
-When designing network accelerators (FPGAs/ASICs) for High-Frequency Trading (HFT) or Deep Packet Inspection (DPI), hardware cannot directly interact with a live Ethernet wire during early development phases. 
 
-**Pcap2HDL acts as a Digital Twin:**
-* **Deterministic Replay:** Feeds real-world Wireshark traces (`.pcap`) into hardware logic step-by-step.
-* **No Packet Loss:** Freezes simulation time to allow deep debugging of complex edge-case network bugs.
-* **AXI-Stream Emulation:** Converts static data into real-time streaming hardware protocols with explicit control signaling (`tstart`, `tlast`, `tvalid`).
+Replay captured network traces in a cycle-accurate SystemVerilog simulation.
 
-##  Environment Prerequisites
-This framework runs inside a Linux Virtual Machine (e.g., Ubuntu) and relies on open-source EDA and packet capture libraries:
+Pcap2HDL streams `.pcap` files into Verilator through DPI-C (`libpcap`). Each captured byte is driven on an AXI-Stream-like bus (`tdata`, `tvalid`, `tstart`, `tlast`) so hardware under test can see the same frames a NIC would, with simulation time frozen for debug.
+
+Typical uses: early bring-up of FPGA or ASIC packet pipelines (classification, DPI, RoCE-aware paths) before silicon or a live Ethernet port is available.
+
+## Requirements
+
+Linux (Ubuntu is the reference environment), Verilator 5.032 or later, and:
+
 ```bash
-# Install essential C/C++ build tools and the PCAP development library
 sudo apt update
 sudo apt install build-essential libpcap-dev
 ```
 
-Ensure you have **Verilator** installed (Verified on version 5.032+).
-##  File Structure
-* `Makefile` - Orchestrates the compilation, simulation runs, and waveform generation.
-* `tb_pcap_dpi.sv` - SystemVerilog testbench importing C-DPI functions and driving hardware buses.
-* `pkt_size_filter.sv` - Streaming length classifier (runt / standard / jumbo).
-* `pkt_header_parser.sv` - Streaming L2/L3 parser (MAC, EtherType, IPv4 addresses).
-* `pcap_reader.c` - Native C program using `libpcap` to parse raw binary network packets offline.
-* `traffic.pcap` - Local packet trace (keep out of git; jumbo captures can be multi-GB).
-* `simulation.log` - Output log file mapping packet records.
-* `docs/gtkwave_8pkt.jpg` - GTKWave capture of an 8-packet IPv4 replay.
+GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-core`, `ibverbs-utils`, and `tcpdump`; see `docs/soft_roce_veth.md`.
 
-##  Architecture & Data Flow
-1. **Initialization:** The SystemVerilog testbench invokes `open_pcap()` via DPI-C.
-2. **Packet Fetching:** The simulator loops up to `MAX_PACKETS` (default **8**). For each packet, C returns the captured length (`caplen`).
-3. **Hardware Streaming:** Bytes are driven on the clock negedge so they are stable for the DUT on posedge, with interface flags:
-   * `tstart`: Asserted on byte 0 of a packet.
-   * `tlast`: Asserted on the final byte of a packet.
-   * `tvalid`: Validates active data stream.
-4. **Packet sizing (`pkt_size_filter`):** A two-state machine (`IDLE`/`COUNT`) counts `tvalid` beats and pulses `pkt_done` with runt / standard / jumbo flags.
-5. **Header parse (`pkt_header_parser`):** Latches dest/src MAC on bytes 0–11, EtherType on 12–13, and IPv4 addresses on 26–33. Pulses `hdr_valid` with `is_ipv4` / `is_non_ipv4` / `is_truncated`.
+## Layout
 
-[ Wireshark (.pcap) ] ➔ [ libpcap (C-DPI) ] ➔ [ SystemVerilog Testbench ] ➔ [ pkt_size_filter + pkt_header_parser ]
+| Path | Role |
+|------|------|
+| `Makefile` | Compile, run, waveforms, clean |
+| `tb_pcap_dpi.sv` | Testbench: DPI imports, stream driver, plusargs |
+| `pkt_size_filter.sv` | Frame length: runt (&lt;64), standard, jumbo (&gt;1500) |
+| `pkt_header_parser.sv` | L2–L4 parse; TCP / UDP / Soft-RoCE flags |
+| `pcap_reader.c` | Offline `libpcap` reader (`caplen` bytes) |
+| `traffic.pcap` | Local iperf TCP trace (not in git) |
+| `soft_roce.pcap` | Local Soft-RoCEv2 trace from `scripts/soft_roce_veth.sh` |
+| `docs/` | Capture notes, TCP GTKWave still |
+| `examples/` | Soft-RoCE simulation logs and GTKWave still |
+| `scripts/soft_roce_veth.sh` | veth + RXE + `ibv_rc_pingpong` capture helper |
 
-## ⚡ Automation Controls (Makefile Commands)
-
-The project includes a robust `Makefile` to quickly manage your verification workflow:
-
-* **Compile and Run Simulation** (default: 8 packets; override as needed):
-  ```bash
-  make
-  make MAX_PACKETS=32
-  ```
-* **Open Waveform File (VCD) in GTKWave:**
-  ```bash
-  make wave
-  ```
-* **Wipe Build Artifacts and Logs:**
-  ```bash
-  make clean
-  ```
-
-## Example run (`make MAX_PACKETS=8`)
-
-A healthy replay prints one `[HDR]` line when L2/L3 fields are ready (byte 33 for IPv4) and one `[DUT]` line when the frame ends (`tlast` → `pkt_done`). MACs swapping direction while IPs stay `192.168.1.1 ↔ 192.168.1.2` is a two-host conversation, not a parser bug.
+## Data path
 
 ```
-[C-DPI] Successfully opened traffic.pcap
-[SV] Streaming up to 8 packets into size filter + header parser
-[SV] Processing Packet #1 (Length: 74 bytes)
-[HDR] dst=badc18c5a289  src=2a6b39583009  etype=0x0800      IPv4  192.168.1.1 -> 192.168.1.2
-[DUT] Classified packet: 74 bytes -> STANDARD
-[SV] Processing Packet #2 (Length: 74 bytes)
-[HDR] dst=2a6b39583009  src=badc18c5a289  etype=0x0800      IPv4  192.168.1.2 -> 192.168.1.1
-[DUT] Classified packet: 74 bytes -> STANDARD
-[SV] Processing Packet #3 (Length: 66 bytes)
-[HDR] dst=badc18c5a289  src=2a6b39583009  etype=0x0800      IPv4  192.168.1.1 -> 192.168.1.2
-[DUT] Classified packet: 66 bytes -> STANDARD
-[SV] Processing Packet #4 (Length: 103 bytes)
-[HDR] dst=badc18c5a289  src=2a6b39583009  etype=0x0800      IPv4  192.168.1.1 -> 192.168.1.2
-[DUT] Classified packet: 103 bytes -> STANDARD
-[SV] Processing Packet #5 (Length: 66 bytes)
-[HDR] dst=2a6b39583009  src=badc18c5a289  etype=0x0800      IPv4  192.168.1.2 -> 192.168.1.1
-[DUT] Classified packet: 66 bytes -> STANDARD
-[SV] Processing Packet #6 (Length: 67 bytes)
-[HDR] dst=2a6b39583009  src=badc18c5a289  etype=0x0800      IPv4  192.168.1.2 -> 192.168.1.1
-[DUT] Classified packet: 67 bytes -> STANDARD
-[SV] Processing Packet #7 (Length: 66 bytes)
-[HDR] dst=badc18c5a289  src=2a6b39583009  etype=0x0800      IPv4  192.168.1.1 -> 192.168.1.2
-[DUT] Classified packet: 66 bytes -> STANDARD
-[SV] Processing Packet #8 (Length: 70 bytes)
-[HDR] dst=badc18c5a289  src=2a6b39583009  etype=0x0800      IPv4  192.168.1.1 -> 192.168.1.2
-[DUT] Classified packet: 70 bytes -> STANDARD
-
-[SV] Reached packet cap of 8. Stopping stream.
-
-[SV] Simulation finished. Streamed 8 packets.
-[DUT] Size    runt=0  standard=8  jumbo=0
-[DUT] Header  ipv4=8  non-ipv4=0  truncated=0
+.pcap  ->  libpcap (DPI-C)  ->  testbench byte stream  ->  pkt_size_filter
+                                                         ->  pkt_header_parser
 ```
 
-![GTKWave 8-packet replay](docs/gtkwave_8pkt.jpg)
+1. `open_pcap()` opens the file named by `+PCAP=`.
+2. Packets are replayed up to `+MAX_PACKETS=` (default 8).
+3. Bytes are updated on the clock negedge and sampled by the DUT on posedge.
+4. `pkt_size_filter` counts `tvalid` beats and pulses `pkt_done` with length class.
+5. `pkt_header_parser` latches MAC, EtherType, IPv4 addresses, and L4 ports. UDP destination or source port 4791 (or EtherType 0x8915) sets `is_roce`; TCP sets `is_tcp`.
 
-Eight `tvalid` bursts (~6 µs). `hdr_valid` ticks inside each burst; `pkt_done` follows `tlast`. Dest/src MAC swap each reply; `ethertype` stays `0x0800`; `dst_ip` / `src_ip` toggle between `C0A80101` (`192.168.1.1`) and `C0A80102` (`192.168.1.2`).
+## Build and run
 
-In GTKWave, each `tvalid` burst is one frame: `tstart` on the first beat, `tlast` on the last, `hdr_valid` one cycle after byte 33, `pkt_done` one cycle after `tlast`. `dst_mac` / `src_mac` / `src_ip` / `dst_ip` hold until the next packet overwrites them. At this zoom `clk` looks solid; zoom into one burst to see the 10 ns clock.
+```bash
+make                              # traffic.pcap, 8 packets
+make PCAP=soft_roce.pcap          # Soft-RoCEv2
+make PCAP=soft_roce.pcap MAX_PACKETS=16
+make wave                         # GTKWave on simulation_trace.vcd
+make clean
+```
 
-##  Progressive Roadmap
+Traces are selected at runtime; a rebuild is not required when only `PCAP` or `MAX_PACKETS` changes.
 
-Development scales progressively out from the core environment:
+## Example: TCP (`traffic.pcap`)
 
-- [x] **Milestone 1: Environment Setup** – Successfully stream `.pcap` files into Verilator using DPI-C libraries.
-- [x] **Milestone 2: Simulation Control** – Implement safe runtime exits and packet capping.
-- [x] **Milestone 3: Packet Sizing Filter** – Verilog state machine classifies runt (<64), standard, and jumbo (>1500) frames.
-- [x] **Milestone 4: L2/L3 Header Parser** – Extract dest/src MAC, EtherType, IPv4 addresses; flag non-IPv4 and truncated frames.
+One `[HDR]` line is printed when headers are valid (after L4 ports for TCP/UDP). One `[DUT]` line follows `tlast`. MAC swap with a stable `192.168.1.1` / `192.168.1.2` pair is a two-host conversation.
 
+```
+[HDR] ... IPv4  192.168.1.1:42262 -> 192.168.1.2:5201   TCP
+[DUT] Classified packet: 74 bytes -> STANDARD
+...
+[DUT] Header  ipv4=8  tcp=8  udp=0  roce=0  other=0  trunc=0
+```
 
+Waveform: `docs/gtkwave_8pkt.jpg`. Each `tvalid` burst is one frame (`tstart` / `tlast`). At millisecond zoom the 10 ns clock looks solid; zoom into a burst to see edges.
+
+## Example: Soft-RoCE (`soft_roce.pcap`)
+
+```bash
+make PCAP=soft_roce.pcap
+make PCAP=soft_roce.pcap MAX_PACKETS=16
+```
+
+Frames to UDP/4791 are tagged `ROCE`. 1082-byte frames are RC Send; 62-byte frames are RC Ack and are also marked runt (&lt;64). Full logs and a GTKWave capture are in `examples/`.
+
+Capture a new Soft-RoCE file with `sudo ./scripts/soft_roce_veth.sh setup` then `demo` (`docs/soft_roce_veth.md`).
+
+## Status
+
+- Environment: DPI-C pcap stream into Verilator
+- Control: packet cap and clean exit
+- Size filter: runt / standard / jumbo
+- L2/L3: MAC, EtherType, IPv4
+- L4: TCP/UDP ports; Soft-RoCE classified on UDP/4791 (BTH not parsed)
+
+## License
+
+See `LICENSE`.

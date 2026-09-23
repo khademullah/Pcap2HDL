@@ -13,8 +13,10 @@ C_SOURCES  = pcap_reader.c
 WAVE_FILE  = simulation_trace.vcd
 LOG_FILE   = simulation.log
 
-# Default packet cap stays small: traffic.pcap is jumbo-heavy (~35 KB avg).
+# Default packet cap stays small: jumbo traces are slow at 1 byte/cycle.
 MAX_PACKETS ?= 8
+# traffic.pcap = iperf TCP/IP    soft_roce.pcap = Soft-RoCEv2
+PCAP ?= traffic.pcap
 
 # Verilator compilation flags
 # --binary: Compiles everything down to a native executable
@@ -40,7 +42,7 @@ run: compile
 	@if [ ! -f ./obj_dir/V$(TOP_MODULE) ]; then \
 		echo "[ERROR] Compiled executable not found!"; exit 1; \
 	fi
-	./obj_dir/V$(TOP_MODULE) +MAX_PACKETS=$(MAX_PACKETS) | tee $(LOG_FILE)
+	./obj_dir/V$(TOP_MODULE) +MAX_PACKETS=$(MAX_PACKETS) +PCAP=$(PCAP) | tee $(LOG_FILE)
 
 # Open generated trace file in GTKWave waveform viewer
 .PHONY: wave
@@ -65,6 +67,7 @@ clean:
 help:
 	@echo "Available Makefile commands:"
 	@echo "  make compile  - Verilate and compile source code"
-	@echo "  make run      - Compile and run simulation (MAX_PACKETS=$(MAX_PACKETS))"
+	@echo "  make run      - Compile and run (PCAP=$(PCAP) MAX_PACKETS=$(MAX_PACKETS))"
+	@echo "  make run PCAP=soft_roce.pcap MAX_PACKETS=16"
 	@echo "  make wave     - Open simulation trace in GTKWave background"
 	@echo "  make clean    - Remove build artifacts, waveforms, and logs"

@@ -24,22 +24,26 @@ module tb_pcap_dpi;
     wire        hdr_is_ipv4;
     wire        hdr_is_non_ipv4;
     wire        hdr_is_truncated;
+    wire        hdr_is_tcp;
+    wire        hdr_is_udp;
+    wire        hdr_is_roce;
     wire [47:0] dst_mac;
     wire [47:0] src_mac;
     wire [15:0] ethertype;
     wire [31:0] src_ip;
     wire [31:0] dst_ip;
+    wire [7:0]  ip_proto;
+    wire [15:0] src_port;
+    wire [15:0] dst_port;
 
     int pkt_len;
     int i;
     int packet_count;
     int max_packets;
-    int n_runt;
-    int n_standard;
-    int n_jumbo;
-    int n_ipv4;
-    int n_non_ipv4;
-    int n_truncated;
+    int n_runt, n_standard, n_jumbo;
+    int n_ipv4, n_non_ipv4, n_truncated;
+    int n_tcp, n_udp, n_roce;
+    string pcap_name;
 
     pkt_size_filter #(
         .JUMBO_THRESH(1500),
@@ -69,11 +73,17 @@ module tb_pcap_dpi;
         .is_ipv4(hdr_is_ipv4),
         .is_non_ipv4(hdr_is_non_ipv4),
         .is_truncated(hdr_is_truncated),
+        .is_tcp(hdr_is_tcp),
+        .is_udp(hdr_is_udp),
+        .is_roce(hdr_is_roce),
         .dst_mac(dst_mac),
         .src_mac(src_mac),
         .ethertype(ethertype),
         .src_ip(src_ip),
-        .dst_ip(dst_ip)
+        .dst_ip(dst_ip),
+        .ip_proto(ip_proto),
+        .src_port(src_port),
+        .dst_port(dst_port)
     );
 
     always #5 clk = ~clk;
@@ -103,14 +113,20 @@ module tb_pcap_dpi;
                 n_ipv4 = n_ipv4 + 1;
             else
                 n_non_ipv4 = n_non_ipv4 + 1;
+            if (hdr_is_tcp)  n_tcp  = n_tcp + 1;
+            if (hdr_is_udp)  n_udp  = n_udp + 1;
+            if (hdr_is_roce) n_roce = n_roce + 1;
 
-            $display("[HDR] dst=%012h  src=%012h  etype=0x%04h  %s  %0d.%0d.%0d.%0d -> %0d.%0d.%0d.%0d",
+            $display("[HDR] dst=%012h  src=%012h  etype=0x%04h  %s  %0d.%0d.%0d.%0d:%0d -> %0d.%0d.%0d.%0d:%0d  %s",
                      dst_mac, src_mac, ethertype,
                      hdr_is_truncated ? "TRUNC" :
                      hdr_is_ipv4      ? "IPv4"  :
                                         "NON-IPv4",
-                     src_ip[31:24], src_ip[23:16], src_ip[15:8], src_ip[7:0],
-                     dst_ip[31:24], dst_ip[23:16], dst_ip[15:8], dst_ip[7:0]);
+                     src_ip[31:24], src_ip[23:16], src_ip[15:8], src_ip[7:0], src_port,
+                     dst_ip[31:24], dst_ip[23:16], dst_ip[15:8], dst_ip[7:0], dst_port,
+                     hdr_is_roce ? "ROCE" :
+                     hdr_is_tcp  ? "TCP"  :
+                     hdr_is_udp  ? "UDP"  : "");
         end
     end
 
@@ -133,19 +149,25 @@ module tb_pcap_dpi;
         n_ipv4 = 0;
         n_non_ipv4 = 0;
         n_truncated = 0;
+        n_tcp = 0;
+        n_udp = 0;
+        n_roce = 0;
         max_packets = 8;
+        pcap_name = "traffic.pcap";
         void'($value$plusargs("MAX_PACKETS=%d", max_packets));
+        void'($value$plusargs("PCAP=%s", pcap_name));
 
         #20;
         rst_n = 1;
         #10;
 
-        if (open_pcap("traffic.pcap") != 0) begin
+        $display("[SV] Opening %s", pcap_name);
+        if (open_pcap(pcap_name) != 0) begin
             $display("[SV] Failed to open PCAP file. Exiting.");
             $finish;
         end
 
-        $display("[SV] Streaming up to %0d packets into size filter + header parser", max_packets);
+        $display("[SV] Streaming up to %0d packets", max_packets);
 
         while (1) begin
             if (packet_count >= max_packets) begin
@@ -179,11 +201,11 @@ module tb_pcap_dpi;
         end
 
         close_pcap();
-        $display("\n[SV] Simulation finished. Streamed %0d packets.", packet_count);
+        $display("\n[SV] Simulation finished. File=%s  Streamed %0d packets.", pcap_name, packet_count);
         $display("[DUT] Size    runt=%0d  standard=%0d  jumbo=%0d",
                  n_runt, n_standard, n_jumbo);
-        $display("[DUT] Header  ipv4=%0d  non-ipv4=%0d  truncated=%0d",
-                 n_ipv4, n_non_ipv4, n_truncated);
+        $display("[DUT] Header  ipv4=%0d  tcp=%0d  udp=%0d  roce=%0d  other=%0d  trunc=%0d",
+                 n_ipv4, n_tcp, n_udp, n_roce, n_non_ipv4, n_truncated);
         $finish;
     end
 

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/pcap2hdl-logo.png" alt="Pcap2HDL" width="280">
+  <img src="docs/pcap2hdl-logo-dark.png" alt="Pcap2HDL" width="280">
 </p>
 
 # Pcap2HDL

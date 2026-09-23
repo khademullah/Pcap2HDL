@@ -29,7 +29,7 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 | `tb_pcap_dpi.sv` | Testbench: DPI imports, stream driver, plusargs |
 | `pkt_size_filter.sv` | Frame length: runt (&lt;64), standard, jumbo (&gt;1500) |
 | `pkt_header_parser.sv` | L2–L4 parse; TCP / UDP / Soft-RoCE BTH (opcode, QP, PSN) |
-| `pcap_reader.c` | Offline `libpcap` reader (`caplen` bytes) |
+| `pcap_reader.c` | Offline `libpcap` reader: bytes, wire length, timestamp, DLT |
 | `traffic.pcap` | Local iperf TCP trace (not in git) |
 | `soft_roce.pcap` | Local Soft-RoCEv2 trace from `scripts/soft_roce_veth.sh` |
 | `docs/` | Capture notes, TCP GTKWave still |
@@ -43,8 +43,8 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
                                                          ->  pkt_header_parser
 ```
 
-1. `open_pcap()` opens the file named by `+PCAP=`.
-2. Packets are replayed up to `+MAX_PACKETS=` (default 8).
+1. `open_pcap()` opens the file named by `+PCAP=`; `get_datalink()` reports the capture DLT.
+2. Packets are replayed up to `+MAX_PACKETS=` (default 8). After each `fetch_next_packet()`, `get_wire_len()` / `get_ts_sec()` / `get_ts_usec()` expose the pcap header (on-wire length vs stored `caplen`, capture timestamp).
 3. Bytes are updated on the clock negedge and sampled by the DUT on posedge.
 4. `pkt_size_filter` counts `tvalid` beats and pulses `pkt_done` with length class.
 5. `pkt_header_parser` latches MAC, EtherType, IPv4, and L4 ports. UDP port 4791 (or EtherType 0x8915) sets `is_roce` and, for RoCEv2, BTH opcode, dest QP, and PSN.
@@ -63,11 +63,19 @@ Traces are selected at runtime; a rebuild is not required when only `PCAP` or `M
 
 ## Example: TCP (`traffic.pcap`)
 
-One `[HDR]` line is printed when headers are valid (after L4 ports for TCP/UDP). One `[DUT]` line follows `tlast`. MAC swap with a stable `192.168.1.1` / `192.168.1.2` pair is a two-host conversation.
+```bash
+make
+```
+
+One `[HDR]` line is printed when headers are valid (after L4 ports for TCP/UDP). One `[DUT]` line follows `tlast`. DPI reports DLT, stored vs on-wire length, and the pcap timestamp. MAC swap with a stable `192.168.1.1` / `192.168.1.2` pair is a two-host iperf conversation.
 
 ```
-[HDR] ... IPv4  192.168.1.1:42262 -> 192.168.1.2:5201   TCP
+[SV] Datalink DLT=1 (Ethernet)
+[SV] Processing Packet #1 (captured 74 / wire 74 bytes) ts=1788332455.060537
+[HDR] ... IPv4  192.168.1.1:42262 -> 192.168.1.2:5201  TCP
 [DUT] Classified packet: 74 bytes -> STANDARD
+[SV] Processing Packet #2 (captured 74 / wire 74 bytes) ts=1788332455.060565
+[HDR] ... IPv4  192.168.1.2:5201 -> 192.168.1.1:42262  TCP
 ...
 [DUT] Header  ipv4=8  tcp=8  udp=0  roce=0  other=0  trunc=0
 ```
@@ -98,7 +106,7 @@ Capture a new file with `sudo ./scripts/soft_roce_veth.sh setup` then `demo` (`d
 
 ## Status
 
-- Environment: DPI-C pcap stream into Verilator
+- Environment: DPI-C pcap stream into Verilator (bytes, wire length, timestamp, DLT)
 - Control: packet cap and clean exit
 - Size filter: runt / standard / jumbo
 - L2/L3: MAC, EtherType, IPv4

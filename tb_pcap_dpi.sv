@@ -4,6 +4,10 @@ module tb_pcap_dpi;
 
     import "DPI-C" function int open_pcap(input string filename);
     import "DPI-C" function int fetch_next_packet();
+    import "DPI-C" function int get_wire_len();
+    import "DPI-C" function longint get_ts_sec();
+    import "DPI-C" function int get_ts_usec();
+    import "DPI-C" function int get_datalink();
     import "DPI-C" function byte get_packet_byte();
     import "DPI-C" function void close_pcap();
 
@@ -40,6 +44,10 @@ module tb_pcap_dpi;
     wire [23:0] bth_psn;
 
     int pkt_len;
+    int pkt_wire;
+    int dlt;
+    longint ts_sec;
+    int ts_usec;
     int i;
     int packet_count;
     int max_packets;
@@ -192,6 +200,8 @@ module tb_pcap_dpi;
             $finish;
         end
 
+        dlt = get_datalink();
+        $display("[SV] Datalink DLT=%0d%s", dlt, (dlt == 1) ? " (Ethernet)" : "");
         $display("[SV] Streaming up to %0d packets", max_packets);
 
         while (1) begin
@@ -206,8 +216,15 @@ module tb_pcap_dpi;
                 break;
             end
 
+            pkt_wire = get_wire_len();
+            ts_sec   = get_ts_sec();
+            ts_usec  = get_ts_usec();
             packet_count = packet_count + 1;
-            $display("[SV] Processing Packet #%0d (Length: %0d bytes)", packet_count, pkt_len);
+            $display("[SV] Processing Packet #%0d (captured %0d / wire %0d bytes) ts=%0d.%06d",
+                     packet_count, pkt_len, pkt_wire, ts_sec, ts_usec);
+            if (pkt_len < pkt_wire)
+                $display("[SV] Capture truncated: %0d bytes missing from wire frame",
+                         pkt_wire - pkt_len);
 
             for (i = 0; i < pkt_len; i = i + 1) begin
                 @(negedge clk);

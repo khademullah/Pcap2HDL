@@ -26,13 +26,29 @@ int fetch_next_packet() {
 
     packet_data = pcap_next(handle, &header);
     if (packet_data == NULL) {
-        pcap_close(handle);
-        handle = NULL;
+        packet_data = NULL;
+        current_byte_idx = 0;
         return 0;
     }
     current_byte_idx = 0;
-    /* caplen is the number of bytes actually stored; len is the original wire length. */
+    /* caplen is stored bytes; header.len is original on-wire length. */
     return (int)header.caplen;
+}
+
+int get_wire_len(void) {
+    return packet_data ? (int)header.len : 0;
+}
+
+long long get_ts_sec(void) {
+    return packet_data ? (long long)header.ts.tv_sec : 0;
+}
+
+int get_ts_usec(void) {
+    return packet_data ? (int)header.ts.tv_usec : 0;
+}
+
+int get_datalink(void) {
+    return handle ? pcap_datalink(handle) : -1;
 }
 
 unsigned char get_packet_byte() {

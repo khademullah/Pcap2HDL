@@ -10,6 +10,8 @@ Pcap2HDL streams `.pcap` files into Verilator through DPI-C (`libpcap`). Each ca
 
 Typical uses: early bring-up of FPGA or ASIC packet pipelines (classification, DPI, RoCE-aware paths) before silicon or a live Ethernet port is available.
 
+Current release: [0.1.0](CHANGELOG.md).
+
 ## Requirements
 
 Linux (Ubuntu is the reference environment), Verilator 5.032 or later, and:
@@ -137,7 +139,7 @@ Capture a new file with `sudo ./scripts/soft_roce_veth.sh setup` then `demo` (`d
 - Tracker: RoCE PSN/ACK and next-message PSN_GAP; TCP SYN / SYN-ACK / HS_DONE / FIN / RST
 - Replay: optional `+PACE=1` IFG from pcap timestamps (capped); `AXIS_W=64` eight-byte beats
 
-Remaining work: IPv6 and full TCP windows stay parked.
+Not in 0.1: IPv6, VLAN, full TCP windows, `tready`. See [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 

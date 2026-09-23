@@ -39,7 +39,12 @@ module tb_pcap_dpi;
     wire [7:0]  ip_proto;
     wire [15:0] src_port;
     wire [15:0] dst_port;
+    wire [31:0] tcp_seq;
+    wire [31:0] tcp_ackn;
+    wire [7:0]  tcp_flags;
     wire [7:0]  bth_opcode;
+    wire [15:0] bth_pkey;
+    wire        bth_ackreq;
     wire [23:0] dest_qp;
     wire [23:0] bth_psn;
 
@@ -62,7 +67,15 @@ module tb_pcap_dpi;
     int n_ipv4, n_non_ipv4, n_truncated;
     int n_tcp, n_udp, n_roce;
     int n_msg, n_ack, n_psn_err, n_op_err;
+    bit pace;
+    int pace_max_us;
+    int idle_cyc;
+    longint prev_ts_sec;
+    int prev_ts_usec;
+    longint delta_us;
+    int pace_arg;
     string pcap_name;
+    string pcap_arg;
 
     function automatic string bth_opname(input logic [7:0] op);
         case (op)
@@ -80,6 +93,20 @@ module tb_pcap_dpi;
             8'h11: bth_opname = "ACK";
             default: bth_opname = $sformatf("OP_0x%02h", op);
         endcase
+    endfunction
+
+    function automatic string tcp_flagstr(input logic [7:0] f);
+        tcp_flagstr = "";
+        if (f[0]) tcp_flagstr = {tcp_flagstr, "FIN "};
+        if (f[1]) tcp_flagstr = {tcp_flagstr, "SYN "};
+        if (f[2]) tcp_flagstr = {tcp_flagstr, "RST "};
+        if (f[3]) tcp_flagstr = {tcp_flagstr, "PSH "};
+        if (f[4]) tcp_flagstr = {tcp_flagstr, "ACK "};
+        if (f[5]) tcp_flagstr = {tcp_flagstr, "URG "};
+        if (tcp_flagstr.len() == 0)
+            tcp_flagstr = "-";
+        else
+            tcp_flagstr = tcp_flagstr.substr(0, tcp_flagstr.len() - 2);
     endfunction
 
     pkt_size_filter #(
@@ -121,7 +148,12 @@ module tb_pcap_dpi;
         .ip_proto(ip_proto),
         .src_port(src_port),
         .dst_port(dst_port),
+        .tcp_seq(tcp_seq),
+        .tcp_ack(tcp_ackn),
+        .tcp_flags(tcp_flags),
         .bth_opcode(bth_opcode),
+        .bth_pkey(bth_pkey),
+        .bth_ackreq(bth_ackreq),
         .dest_qp(dest_qp),
         .bth_psn(bth_psn)
     );
@@ -177,17 +209,23 @@ module tb_pcap_dpi;
             if (hdr_is_udp)  n_udp  = n_udp + 1;
             if (hdr_is_roce) n_roce = n_roce + 1;
 
-            $display("[HDR] dst=%012h  src=%012h  etype=0x%04h  %s  %0d.%0d.%0d.%0d:%0d -> %0d.%0d.%0d.%0d:%0d  %s",
-                     dst_mac, src_mac, ethertype,
-                     hdr_is_truncated ? "TRUNC" :
-                     hdr_is_ipv4      ? "IPv4"  :
-                                        "NON-IPv4",
-                     src_ip[31:24], src_ip[23:16], src_ip[15:8], src_ip[7:0], src_port,
-                     dst_ip[31:24], dst_ip[23:16], dst_ip[15:8], dst_ip[7:0], dst_port,
-                     hdr_is_roce ? $sformatf("ROCE %s qp=0x%0h psn=0x%0h",
-                                             bth_opname(bth_opcode), dest_qp, bth_psn) :
-                     hdr_is_tcp  ? "TCP"  :
-                     hdr_is_udp  ? "UDP"  : "");
+            if (hdr_is_roce)
+                $display("[HDR] dst=%012h  src=%012h  etype=0x%04h  %s  %0d.%0d.%0d.%0d:%0d -> %0d.%0d.%0d.%0d:%0d  ROCE %s qp=0x%0h psn=0x%0h pkey=0x%04h%s",
+                         dst_mac, src_mac, ethertype,
+                         hdr_is_truncated ? "TRUNC" : hdr_is_ipv4 ? "IPv4" : "NON-IPv4",
+                         src_ip[31:24], src_ip[23:16], src_ip[15:8], src_ip[7:0], src_port,
+                         dst_ip[31:24], dst_ip[23:16], dst_ip[15:8], dst_ip[7:0], dst_port,
+                         bth_opname(bth_opcode), dest_qp, bth_psn, bth_pkey,
+                         bth_ackreq ? " AckReq" : "");
+            else
+                $display("[HDR] dst=%012h  src=%012h  etype=0x%04h  %s  %0d.%0d.%0d.%0d:%0d -> %0d.%0d.%0d.%0d:%0d  %s",
+                         dst_mac, src_mac, ethertype,
+                         hdr_is_truncated ? "TRUNC" : hdr_is_ipv4 ? "IPv4" : "NON-IPv4",
+                         src_ip[31:24], src_ip[23:16], src_ip[15:8], src_ip[7:0], src_port,
+                         dst_ip[31:24], dst_ip[23:16], dst_ip[15:8], dst_ip[7:0], dst_port,
+                         hdr_is_tcp ? $sformatf("TCP %s seq=0x%08h ack=0x%08h",
+                                                tcp_flagstr(tcp_flags), tcp_seq, tcp_ackn) :
+                         hdr_is_udp ? "UDP" : "");
         end
     end
 
@@ -239,23 +277,33 @@ module tb_pcap_dpi;
         n_psn_err = 0;
         n_op_err = 0;
         max_packets = 8;
+        pace_arg = 0;
+        pace = 1'b0;
+        pace_max_us = 100;
+        prev_ts_sec = 0;
+        prev_ts_usec = 0;
         pcap_name = "traffic.pcap";
         void'($value$plusargs("MAX_PACKETS=%d", max_packets));
-        void'($value$plusargs("PCAP=%s", pcap_name));
+        if ($value$plusargs("PCAP=%s", pcap_arg) && pcap_arg.len() != 0)
+            pcap_name = pcap_arg;
+        void'($value$plusargs("PACE=%d", pace_arg));
+        void'($value$plusargs("PACE_MAX_US=%d", pace_max_us));
+        pace = (pace_arg != 0);
 
         #20;
         rst_n = 1;
         #10;
 
         $display("[SV] Opening %s", pcap_name);
-        if (open_pcap(pcap_name) != 0) begin
+        if (pcap_name.len() == 0 || open_pcap(pcap_name) != 0) begin
             $display("[SV] Failed to open PCAP file. Exiting.");
             $finish;
-        end
+        end else begin
 
         dlt = get_datalink();
         $display("[SV] Datalink DLT=%0d%s", dlt, (dlt == 1) ? " (Ethernet)" : "");
-        $display("[SV] Streaming up to %0d packets", max_packets);
+        $display("[SV] Streaming up to %0d packets%s",
+                 max_packets, pace ? $sformatf(" (PACE=1, IFG cap %0d us)", pace_max_us) : "");
 
         while (1) begin
             if (packet_count >= max_packets) begin
@@ -278,6 +326,24 @@ module tb_pcap_dpi;
             if (pkt_len < pkt_wire)
                 $display("[SV] Capture truncated: %0d bytes missing from wire frame",
                          pkt_wire - pkt_len);
+
+            if (pace && packet_count > 1) begin
+                delta_us = (ts_sec - prev_ts_sec) * 64'sd1000000 +
+                           (longint'(ts_usec) - longint'(prev_ts_usec));
+                if (delta_us < 0)
+                    delta_us = 0;
+                if (delta_us > longint'(pace_max_us))
+                    delta_us = longint'(pace_max_us);
+                idle_cyc = int'(delta_us * 64'sd100);
+                if (idle_cyc < 3)
+                    idle_cyc = 3;
+                $display("[SV] IFG %0d us -> %0d cycles", delta_us, idle_cyc);
+                if (idle_cyc > 3)
+                    repeat (idle_cyc - 3) @(posedge clk);
+            end
+
+            prev_ts_sec  = ts_sec;
+            prev_ts_usec = ts_usec;
 
             for (i = 0; i < pkt_len; i = i + 1) begin
                 @(negedge clk);
@@ -304,6 +370,7 @@ module tb_pcap_dpi;
         $display("[DUT] Tracker msg=%0d  ack=%0d  psn_err=%0d  op_err=%0d",
                  n_msg, n_ack, n_psn_err, n_op_err);
         $finish;
+        end
     end
 
 endmodule

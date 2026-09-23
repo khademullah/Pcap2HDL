@@ -28,7 +28,7 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 | `Makefile` | Compile, run, waveforms, clean |
 | `tb_pcap_dpi.sv` | Testbench: DPI imports, stream driver, plusargs |
 | `pkt_size_filter.sv` | Frame length: runt (&lt;64), standard, jumbo (&gt;1500) |
-| `pkt_header_parser.sv` | L2–L4 parse; TCP / UDP / Soft-RoCE BTH (opcode, QP, PSN) |
+| `pkt_header_parser.sv` | L2–L4 parse; TCP flags/seq; Soft-RoCE BTH (opcode, QP, PSN, P_Key, AckReq) |
 | `pkt_roce_tracker.sv` | RoCE session CAM: PSN sequence, MSG_DONE, ACK_OK |
 | `pcap_reader.c` | Offline `libpcap` reader: bytes, wire length, timestamp, DLT |
 | `traffic.pcap` | Local iperf TCP trace (not in git) |
@@ -49,7 +49,7 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 2. Packets are replayed up to `+MAX_PACKETS=` (default 8). After each `fetch_next_packet()`, `get_wire_len()` / `get_ts_sec()` / `get_ts_usec()` expose the pcap header (on-wire length vs stored `caplen`, capture timestamp).
 3. Bytes are updated on the clock negedge and sampled by the DUT on posedge.
 4. `pkt_size_filter` counts `tvalid` beats and pulses `pkt_done` with length class.
-5. `pkt_header_parser` latches MAC, EtherType, IPv4, and L4 ports. UDP port 4791 (or EtherType 0x8915) sets `is_roce` and, for RoCEv2, BTH opcode, dest QP, and PSN.
+5. `pkt_header_parser` latches MAC, EtherType, IPv4, L4 ports, TCP sequence/flags, and RoCE BTH (opcode, P_Key, AckReq, dest QP, PSN).
 6. `pkt_roce_tracker` follows Send First/Middle/Last PSN per `{src,dst,qp}` and matches the reverse-direction ACK.
 
 ## Build and run
@@ -58,6 +58,7 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 make                              # traffic.pcap, 8 packets
 make PCAP=soft_roce.pcap          # Soft-RoCEv2
 make PCAP=soft_roce.pcap MAX_PACKETS=16
+make PACE=1                       # IFG from pcap timestamps (capped at 100 us)
 make wave                         # GTKWave on simulation_trace.vcd
 make clean
 ```
@@ -75,8 +76,10 @@ One `[HDR]` line is printed when headers are valid (after L4 ports for TCP/UDP).
 ```
 [SV] Datalink DLT=1 (Ethernet)
 [SV] Processing Packet #1 (captured 74 / wire 74 bytes) ts=1788332455.060537
-[HDR] ... IPv4  192.168.1.1:42262 -> 192.168.1.2:5201  TCP
+[HDR] ... IPv4  192.168.1.1:42262 -> 192.168.1.2:5201  TCP SYN seq=0x5803f137 ack=0x00000000
 [DUT] Classified packet: 74 bytes -> STANDARD
+[SV] Processing Packet #2 ...
+[HDR] ... IPv4  192.168.1.2:5201 -> 192.168.1.1:42262  TCP SYN ACK seq=0x15c9e53f ack=0x5803f138
 [SV] Processing Packet #2 (captured 74 / wire 74 bytes) ts=1788332455.060565
 [HDR] ... IPv4  192.168.1.2:5201 -> 192.168.1.1:42262  TCP
 ...
@@ -98,9 +101,9 @@ UDP/4791 frames are tagged `ROCE` with BTH opcode, dest QP, and PSN. The tracker
 [HDR] ... 192.168.10.1:49441 -> 192.168.10.2:4791  ROCE SEND_FIRST qp=0x11 psn=0xe1b96c
 [HDR] ... 192.168.10.1:49441 -> 192.168.10.2:4791  ROCE SEND_MIDDLE qp=0x11 psn=0xe1b96d
 [HDR] ... 192.168.10.1:49441 -> 192.168.10.2:4791  ROCE SEND_MIDDLE qp=0x11 psn=0xe1b96e
-[HDR] ... 192.168.10.1:49441 -> 192.168.10.2:4791  ROCE SEND_LAST qp=0x11 psn=0xe1b96f
+[HDR] ... 192.168.10.1:49441 -> 192.168.10.2:4791  ROCE SEND_LAST qp=0x11 psn=0xe1b96f pkey=0xffff
 [TRK] MSG_DONE
-[HDR] ... 192.168.10.2:49441 -> 192.168.10.1:4791  ROCE ACK qp=0x11 psn=0xe1b96f
+[HDR] ... 192.168.10.2:49441 -> 192.168.10.1:4791  ROCE ACK qp=0x11 psn=0xe1b96f pkey=0xffff
 [TRK] ACK_OK
 [DUT] Classified packet: 62 bytes ->     RUNT
 ...
@@ -116,9 +119,10 @@ Capture a new file with `sudo ./scripts/soft_roce_veth.sh setup` then `demo` (`d
 - Control: packet cap and clean exit
 - Size filter: runt / standard / jumbo
 - L2/L3: MAC, EtherType, IPv4
-- L4: TCP/UDP ports; Soft-RoCE on UDP/4791
-- RoCEv2 BTH: opcode (SEND_FIRST/MIDDLE/LAST, ACK, …), dest QP, PSN
+- L4: TCP/UDP ports; TCP flags, seq, ack
+- RoCEv2 BTH: opcode, dest QP, PSN, P_Key, AckReq
 - Tracker: PSN sequence per session, message complete, ACK match
+- Replay: optional `+PACE=1` IFG from pcap timestamps (capped)
 
 ## License
 

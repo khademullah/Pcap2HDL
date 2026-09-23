@@ -17,6 +17,8 @@ LOG_FILE   = simulation.log
 MAX_PACKETS ?= 8
 # traffic.pcap = iperf TCP/IP    soft_roce.pcap = Soft-RoCEv2
 PCAP ?= traffic.pcap
+PACE ?= 0
+PACE_MAX_US ?= 100
 
 # Verilator compilation flags
 # --binary: Compiles everything down to a native executable
@@ -42,7 +44,7 @@ run: compile
 	@if [ ! -f ./obj_dir/V$(TOP_MODULE) ]; then \
 		echo "[ERROR] Compiled executable not found!"; exit 1; \
 	fi
-	./obj_dir/V$(TOP_MODULE) +MAX_PACKETS=$(MAX_PACKETS) +PCAP=$(PCAP) | tee $(LOG_FILE)
+	./obj_dir/V$(TOP_MODULE) +MAX_PACKETS=$(MAX_PACKETS) +PCAP="$(PCAP)" +PACE=$(PACE) +PACE_MAX_US=$(PACE_MAX_US) | tee $(LOG_FILE)
 
 # Open generated trace file in GTKWave waveform viewer
 .PHONY: wave
@@ -69,5 +71,6 @@ help:
 	@echo "  make compile  - Verilate and compile source code"
 	@echo "  make run      - Compile and run (PCAP=$(PCAP) MAX_PACKETS=$(MAX_PACKETS))"
 	@echo "  make run PCAP=soft_roce.pcap MAX_PACKETS=16"
+	@echo "  make run PACE=1                 - IFG from pcap timestamps"
 	@echo "  make wave     - Open simulation trace in GTKWave background"
 	@echo "  make clean    - Remove build artifacts, waveforms, and logs"

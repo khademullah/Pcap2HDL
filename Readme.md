@@ -17,30 +17,33 @@ sudo apt install build-essential libpcap-dev
 ```
 
 Ensure you have **Verilator** installed (Verified on version 5.032+).
-##  File Structurwe
+##  File Structure
 * `Makefile` - Orchestrates the compilation, simulation runs, and waveform generation.
 * `tb_pcap_dpi.sv` - SystemVerilog testbench importing C-DPI functions and driving hardware buses.
+* `pkt_size_filter.sv` - Streaming length classifier (runt / standard / jumbo).
 * `pcap_reader.c` - Native C program using `libpcap` to parse raw binary network packets offline.
-* `traffic.pcap` - Your target packet trace file captured from Wireshark.
+* `traffic.pcap` - Local packet trace (keep out of git; jumbo captures can be multi-GB).
 * `simulation.log` - Output log file mapping packet records.
 
 ##  Architecture & Data Flow
 1. **Initialization:** The SystemVerilog testbench invokes `open_pcap()` via DPI-C.
 2. **Packet Fetching:** The simulator loops up to **1,000 packets**. For each packet, C queries the packet length.
-3. **Hardware Streaming:** Bytes are streamed sequentially into the Verilog design on every positive edge of the clock (`clk`), accompanied by interface flags:
+3. **Hardware Streaming:** Bytes are driven on the clock negedge so they are stable for the DUT on posedge, with interface flags:
    * `tstart`: Asserted on byte 0 of a packet.
    * `tlast`: Asserted on the final byte of a packet.
    * `tvalid`: Validates active data stream.
+4. **Packet sizing (`pkt_size_filter`):** A two-state machine (`IDLE`/`COUNT`) counts `tvalid` beats and pulses `pkt_done` with runt / standard / jumbo flags.
 
-[ Wireshark (.pcap) ] ➔ [ libpcap (C-DPI) ] ➔ [ SystemVerilog Testbench ] ➔ [ Your Verilog Module ]
+[ Wireshark (.pcap) ] ➔ [ libpcap (C-DPI) ] ➔ [ SystemVerilog Testbench ] ➔ [ pkt_size_filter ]
 
 ## ⚡ Automation Controls (Makefile Commands)
 
 The project includes a robust `Makefile` to quickly manage your verification workflow:
 
-* **Compile and Run Simulation:**
+* **Compile and Run Simulation** (default: 8 packets; override as needed):
   ```bash
   make
+  make MAX_PACKETS=32
   ```
 * **Open Waveform File (VCD) in GTKWave:**
   ```bash
@@ -56,8 +59,8 @@ The project includes a robust `Makefile` to quickly manage your verification wor
 Development scales progressively out from the core environment:
 
 - [x] **Milestone 1: Environment Setup** – Successfully stream `.pcap` files into Verilator using DPI-C libraries.
-- [x] **Milestone 2: Simulation Control** – Implement safe runtime exits and packet capping (e.g., stopping at 1,000 packets).
-- [ ] **Milestone 3: Packet Sizing Filter** – Construct a Verilog state machine to monitor packet size and categorize standard frames vs. massive jumbo frames (>1500 bytes).
+- [x] **Milestone 2: Simulation Control** – Implement safe runtime exits and packet capping.
+- [x] **Milestone 3: Packet Sizing Filter** – Verilog state machine classifies runt (<64), standard, and jumbo (>1500) frames.
 - [ ] **Milestone 4: L2/L3 Header Parser** – Deep extract EtherType, IPv4 addresses, and check hardware framing limits.
 
 

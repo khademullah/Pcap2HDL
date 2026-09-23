@@ -8,10 +8,13 @@ TOP_MODULE = tb_pcap_dpi
 WAVE_VIEWER = gtkwave
 
 # Source files
-SV_SOURCES = tb_pcap_dpi.sv
+SV_SOURCES = tb_pcap_dpi.sv pkt_size_filter.sv
 C_SOURCES  = pcap_reader.c
 WAVE_FILE  = simulation_trace.vcd
 LOG_FILE   = simulation.log
+
+# Default packet cap stays small: traffic.pcap is jumbo-heavy (~35 KB avg).
+MAX_PACKETS ?= 8
 
 # Verilator compilation flags
 # --binary: Compiles everything down to a native executable
@@ -37,7 +40,7 @@ run: compile
 	@if [ ! -f ./obj_dir/V$(TOP_MODULE) ]; then \
 		echo "[ERROR] Compiled executable not found!"; exit 1; \
 	fi
-	./obj_dir/V$(TOP_MODULE) | tee $(LOG_FILE)
+	./obj_dir/V$(TOP_MODULE) +MAX_PACKETS=$(MAX_PACKETS) | tee $(LOG_FILE)
 
 # Open generated trace file in GTKWave waveform viewer
 .PHONY: wave
@@ -62,6 +65,6 @@ clean:
 help:
 	@echo "Available Makefile commands:"
 	@echo "  make compile  - Verilate and compile source code"
-	@echo "  make run      - Compile and run simulation (default)"
+	@echo "  make run      - Compile and run simulation (MAX_PACKETS=$(MAX_PACKETS))"
 	@echo "  make wave     - Open simulation trace in GTKWave background"
 	@echo "  make clean    - Remove build artifacts, waveforms, and logs"

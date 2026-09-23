@@ -1,4 +1,3 @@
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <pcap.h>
 #include "svdpi.h"
@@ -24,7 +23,7 @@ int open_pcap(const char* filename) {
 
 int fetch_next_packet() {
     if (!handle) return 0;
-    
+
     packet_data = pcap_next(handle, &header);
     if (packet_data == NULL) {
         pcap_close(handle);
@@ -32,14 +31,24 @@ int fetch_next_packet() {
         return 0;
     }
     current_byte_idx = 0;
-    return header.len;
+    /* caplen is the number of bytes actually stored; len is the original wire length. */
+    return (int)header.caplen;
 }
 
 unsigned char get_packet_byte() {
-    if (!packet_data || current_byte_idx >= header.len) {
+    if (!packet_data || current_byte_idx >= (int)header.caplen) {
         return 0;
     }
     return packet_data[current_byte_idx++];
+}
+
+void close_pcap() {
+    if (handle) {
+        pcap_close(handle);
+        handle = NULL;
+    }
+    packet_data = NULL;
+    current_byte_idx = 0;
 }
 
 #ifdef __cplusplus

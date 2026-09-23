@@ -8,7 +8,7 @@ TOP_MODULE = tb_pcap_dpi
 WAVE_VIEWER = gtkwave
 
 # Source files
-SV_SOURCES = tb_pcap_dpi.sv pkt_size_filter.sv
+SV_SOURCES = tb_pcap_dpi.sv pkt_size_filter.sv pkt_header_parser.sv
 C_SOURCES  = pcap_reader.c
 WAVE_FILE  = simulation_trace.vcd
 LOG_FILE   = simulation.log

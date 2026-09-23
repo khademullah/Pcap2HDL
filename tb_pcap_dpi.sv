@@ -43,6 +43,13 @@ module tb_pcap_dpi;
     wire [23:0] dest_qp;
     wire [23:0] bth_psn;
 
+    wire trk_evt;
+    wire trk_psn_err;
+    wire trk_op_err;
+    wire trk_sess_full;
+    wire trk_msg_done;
+    wire trk_ack_ok;
+
     int pkt_len;
     int pkt_wire;
     int dlt;
@@ -54,6 +61,7 @@ module tb_pcap_dpi;
     int n_runt, n_standard, n_jumbo;
     int n_ipv4, n_non_ipv4, n_truncated;
     int n_tcp, n_udp, n_roce;
+    int n_msg, n_ack, n_psn_err, n_op_err;
     string pcap_name;
 
     function automatic string bth_opname(input logic [7:0] op);
@@ -118,6 +126,26 @@ module tb_pcap_dpi;
         .bth_psn(bth_psn)
     );
 
+    pkt_roce_tracker #(
+        .NUM_SESS(4)
+    ) u_tracker (
+        .clk(clk),
+        .rst_n(rst_n),
+        .hdr_valid(hdr_valid),
+        .is_roce(hdr_is_roce),
+        .src_ip(src_ip),
+        .dst_ip(dst_ip),
+        .opcode(bth_opcode),
+        .dest_qp(dest_qp),
+        .psn(bth_psn),
+        .evt_valid(trk_evt),
+        .psn_err(trk_psn_err),
+        .op_err(trk_op_err),
+        .sess_full(trk_sess_full),
+        .msg_done(trk_msg_done),
+        .ack_ok(trk_ack_ok)
+    );
+
     always #5 clk = ~clk;
 
     always @(posedge clk) begin
@@ -163,6 +191,27 @@ module tb_pcap_dpi;
         end
     end
 
+    always @(posedge clk) begin
+        if (rst_n && trk_evt) begin
+            if (trk_msg_done) n_msg     = n_msg + 1;
+            if (trk_ack_ok)   n_ack     = n_ack + 1;
+            if (trk_psn_err)  n_psn_err = n_psn_err + 1;
+            if (trk_op_err)   n_op_err  = n_op_err + 1;
+            if (trk_sess_full)
+                $display("[TRK] SESS_FULL");
+            else if (trk_psn_err)
+                $display("[TRK] PSN_ERR");
+            else if (trk_op_err)
+                $display("[TRK] OP_ERR");
+            else if (trk_ack_ok)
+                $display("[TRK] ACK_OK");
+            else if (trk_msg_done)
+                $display("[TRK] MSG_DONE");
+            else
+                $display("[TRK] OK");
+        end
+    end
+
     initial begin
         $dumpfile("simulation_trace.vcd");
         $dumpvars(0, tb_pcap_dpi);
@@ -185,6 +234,10 @@ module tb_pcap_dpi;
         n_tcp = 0;
         n_udp = 0;
         n_roce = 0;
+        n_msg = 0;
+        n_ack = 0;
+        n_psn_err = 0;
+        n_op_err = 0;
         max_packets = 8;
         pcap_name = "traffic.pcap";
         void'($value$plusargs("MAX_PACKETS=%d", max_packets));
@@ -248,6 +301,8 @@ module tb_pcap_dpi;
                  n_runt, n_standard, n_jumbo);
         $display("[DUT] Header  ipv4=%0d  tcp=%0d  udp=%0d  roce=%0d  other=%0d  trunc=%0d",
                  n_ipv4, n_tcp, n_udp, n_roce, n_non_ipv4, n_truncated);
+        $display("[DUT] Tracker msg=%0d  ack=%0d  psn_err=%0d  op_err=%0d",
+                 n_msg, n_ack, n_psn_err, n_op_err);
         $finish;
     end
 

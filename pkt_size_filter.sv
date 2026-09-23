@@ -1,19 +1,20 @@
 // Streaming packet-length classifier.
-// Counts AXI-Stream-like bytes (tvalid/tstart/tlast) and tags each frame as
-// runt (< MIN_FRAME), standard, or jumbo (> JUMBO_THRESH).
+// Counts AXI-Stream tkeep bits (DATA_W=8 is one byte per cycle).
 
 `timescale 1ns/1ps
 
 module pkt_size_filter #(
+    parameter int DATA_W       = 8,
     parameter int JUMBO_THRESH = 1500,
     parameter int MIN_FRAME    = 64
 ) (
-    input  logic        clk,
-    input  logic        rst_n,
-    input  logic [7:0]  tdata,
-    input  logic        tvalid,
-    input  logic        tstart,
-    input  logic        tlast,
+    input  logic                clk,
+    input  logic                rst_n,
+    input  logic [DATA_W-1:0]   tdata,
+    input  logic [DATA_W/8-1:0] tkeep,
+    input  logic                tvalid,
+    input  logic                tstart,
+    input  logic                tlast,
 
     output logic        pkt_done,
     output logic [31:0] pkt_bytes,
@@ -22,6 +23,8 @@ module pkt_size_filter #(
     output logic        is_jumbo
 );
 
+    localparam int KEEP_W = DATA_W / 8;
+
     typedef enum logic [1:0] {
         ST_IDLE  = 2'd0,
         ST_COUNT = 2'd1
@@ -29,9 +32,15 @@ module pkt_size_filter #(
 
     state_t      state;
     logic [31:0] count;
+    logic [31:0] beat_bytes;
 
-    // tdata is part of the stream contract; length classification ignores payload.
     wire unused_tdata = |tdata;
+
+    always_comb begin
+        beat_bytes = 32'd0;
+        for (int i = 0; i < KEEP_W; i++)
+            beat_bytes = beat_bytes + {31'd0, tkeep[i]};
+    end
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -48,9 +57,9 @@ module pkt_size_filter #(
             unique case (state)
                 ST_IDLE: begin
                     if (tvalid && tstart) begin
-                        count <= 32'd1;
+                        count <= beat_bytes;
                         if (tlast)
-                            classify(32'd1);
+                            classify(beat_bytes);
                         else
                             state <= ST_COUNT;
                     end
@@ -58,11 +67,11 @@ module pkt_size_filter #(
                 ST_COUNT: begin
                     if (tvalid) begin
                         if (tlast) begin
-                            classify(count + 32'd1);
+                            classify(count + beat_bytes);
                             count <= 32'd0;
                             state <= ST_IDLE;
                         end else begin
-                            count <= count + 32'd1;
+                            count <= count + beat_bytes;
                         end
                     end
                 end

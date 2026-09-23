@@ -23,6 +23,8 @@ module pkt_tcp_tracker #(
     output logic        syn_ok,
     output logic        synack_ok,
     output logic        hs_done,
+    output logic        fin_ok,
+    output logic        rst_ok,
     output logic        seq_err,
     output logic        op_err,
     output logic        sess_full
@@ -46,6 +48,7 @@ module pkt_tcp_tracker #(
     wire syn_bit = flags[1];
     wire rst_bit = flags[2];
     wire ack_bit = flags[4];
+    wire fin_bit = flags[0];
 
     integer hit, rev, free_i, i;
 
@@ -55,6 +58,8 @@ module pkt_tcp_tracker #(
             syn_ok     <= 1'b0;
             synack_ok  <= 1'b0;
             hs_done    <= 1'b0;
+            fin_ok     <= 1'b0;
+            rst_ok     <= 1'b0;
             seq_err    <= 1'b0;
             op_err     <= 1'b0;
             sess_full  <= 1'b0;
@@ -65,6 +70,8 @@ module pkt_tcp_tracker #(
             syn_ok    <= 1'b0;
             synack_ok <= 1'b0;
             hs_done   <= 1'b0;
+            fin_ok    <= 1'b0;
+            rst_ok    <= 1'b0;
             seq_err   <= 1'b0;
             op_err    <= 1'b0;
             sess_full <= 1'b0;
@@ -88,7 +95,7 @@ module pkt_tcp_tracker #(
                 end
 
                 if (rst_bit) begin
-                    op_err <= 1'b1;
+                    rst_ok <= 1'b1;
                 end else if (syn_bit && !ack_bit) begin
                     if (hit < 0) begin
                         if (free_i < 0) begin
@@ -120,6 +127,10 @@ module pkt_tcp_tracker #(
                         sess[rev].server_iss  <= seq;
                         synack_ok <= 1'b1;
                     end
+                end else if (fin_bit &&
+                             ((hit >= 0 && sess[hit].established) ||
+                              (rev >= 0 && sess[rev].established))) begin
+                    fin_ok <= 1'b1;
                 end else if (ack_bit) begin
                     if (hit >= 0 && sess[hit].established) begin
                         ;

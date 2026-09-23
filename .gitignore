@@ -2,3 +2,4 @@ obj_dir/
 *.vcd
 *.log
 *.pcap
+.venv/

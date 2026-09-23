@@ -1,6 +1,10 @@
 `timescale 1ns/1ps
 
-module tb_pcap_dpi;
+module tb_pcap_dpi #(
+    parameter int DATA_W = 8
+);
+
+    localparam int KEEP_W = DATA_W / 8;
 
     import "DPI-C" function int open_pcap(input string filename);
     import "DPI-C" function int fetch_next_packet();
@@ -13,10 +17,11 @@ module tb_pcap_dpi;
 
     reg clk;
     reg rst_n;
-    reg [7:0] tdata;
-    reg       tvalid;
-    reg       tstart;
-    reg       tlast;
+    reg [DATA_W-1:0]   tdata;
+    reg [KEEP_W-1:0]   tkeep;
+    reg                tvalid;
+    reg                tstart;
+    reg                tlast;
 
     wire        pkt_done;
     wire [31:0] pkt_bytes;
@@ -36,6 +41,9 @@ module tb_pcap_dpi;
     wire [15:0] ethertype;
     wire [31:0] src_ip;
     wire [31:0] dst_ip;
+    wire [7:0]  ip_ttl;
+    wire [15:0] ip_tot_len;
+    wire        is_len_mismatch;
     wire [7:0]  ip_proto;
     wire [15:0] src_port;
     wire [15:0] dst_port;
@@ -54,14 +62,23 @@ module tb_pcap_dpi;
     wire trk_sess_full;
     wire trk_msg_done;
     wire trk_ack_ok;
+    wire trk_psn_gap;
 
     wire tcp_evt;
     wire tcp_syn_ok;
     wire tcp_synack_ok;
     wire tcp_hs_done;
+    wire tcp_fin_ok;
+    wire tcp_rst_ok;
     wire tcp_seq_err;
     wire tcp_op_err;
     wire tcp_sess_full;
+
+    wire        icrc_valid;
+    wire [31:0] icrc;
+    wire        icrc_ok;
+    wire        icrc_err;
+    wire        icrc_skip;
 
     int pkt_len;
     int pkt_wire;
@@ -69,6 +86,7 @@ module tb_pcap_dpi;
     longint ts_sec;
     int ts_usec;
     int i;
+    int k;
     int packet_count;
     int max_packets;
     int n_runt, n_standard, n_jumbo;
@@ -76,6 +94,8 @@ module tb_pcap_dpi;
     int n_tcp, n_udp, n_roce;
     int n_msg, n_ack, n_psn_err, n_op_err;
     int n_hs, n_tcp_seq_err, n_tcp_op_err;
+    int n_len_mis, n_fin, n_rst, n_psn_gap;
+    int n_icrc_ok, n_icrc_err, n_icrc_skip;
     bit pace;
     int pace_max_us;
     int idle_cyc;
@@ -119,12 +139,14 @@ module tb_pcap_dpi;
     endfunction
 
     pkt_size_filter #(
+        .DATA_W(DATA_W),
         .JUMBO_THRESH(1500),
         .MIN_FRAME(64)
     ) u_filter (
         .clk(clk),
         .rst_n(rst_n),
         .tdata(tdata),
+        .tkeep(tkeep),
         .tvalid(tvalid),
         .tstart(tstart),
         .tlast(tlast),
@@ -135,10 +157,13 @@ module tb_pcap_dpi;
         .is_jumbo(is_jumbo)
     );
 
-    pkt_header_parser u_parser (
+    pkt_header_parser #(
+        .DATA_W(DATA_W)
+    ) u_parser (
         .clk(clk),
         .rst_n(rst_n),
         .tdata(tdata),
+        .tkeep(tkeep),
         .tvalid(tvalid),
         .tstart(tstart),
         .tlast(tlast),
@@ -154,6 +179,9 @@ module tb_pcap_dpi;
         .ethertype(ethertype),
         .src_ip(src_ip),
         .dst_ip(dst_ip),
+        .ip_ttl(ip_ttl),
+        .ip_tot_len(ip_tot_len),
+        .is_len_mismatch(is_len_mismatch),
         .ip_proto(ip_proto),
         .src_port(src_port),
         .dst_port(dst_port),
@@ -184,7 +212,8 @@ module tb_pcap_dpi;
         .op_err(trk_op_err),
         .sess_full(trk_sess_full),
         .msg_done(trk_msg_done),
-        .ack_ok(trk_ack_ok)
+        .ack_ok(trk_ack_ok),
+        .psn_gap(trk_psn_gap)
     );
 
     pkt_tcp_tracker #(
@@ -205,9 +234,30 @@ module tb_pcap_dpi;
         .syn_ok(tcp_syn_ok),
         .synack_ok(tcp_synack_ok),
         .hs_done(tcp_hs_done),
+        .fin_ok(tcp_fin_ok),
+        .rst_ok(tcp_rst_ok),
         .seq_err(tcp_seq_err),
         .op_err(tcp_op_err),
         .sess_full(tcp_sess_full)
+    );
+
+    pkt_roce_icrc #(
+        .DATA_W(DATA_W)
+    ) u_icrc (
+        .clk(clk),
+        .rst_n(rst_n),
+        .tdata(tdata),
+        .tkeep(tkeep),
+        .tvalid(tvalid),
+        .tstart(tstart),
+        .tlast(tlast),
+        .is_roce(hdr_is_roce),
+        .ip_tot_len(ip_tot_len),
+        .icrc_valid(icrc_valid),
+        .icrc(icrc),
+        .icrc_ok(icrc_ok),
+        .icrc_err(icrc_err),
+        .icrc_skip(icrc_skip)
     );
 
     always #5 clk = ~clk;
@@ -230,6 +280,28 @@ module tb_pcap_dpi;
     end
 
     always @(posedge clk) begin
+        if (rst_n && is_len_mismatch) begin
+            n_len_mis = n_len_mis + 1;
+            $display("[DUT] LEN_MISMATCH  captured=%0d  expected=%0d (14+iplen)",
+                     pkt_bytes, 14 + ip_tot_len);
+        end
+    end
+
+    always @(posedge clk) begin
+        if (rst_n && icrc_valid) begin
+            if (icrc_ok)   n_icrc_ok   = n_icrc_ok + 1;
+            if (icrc_err)  n_icrc_err  = n_icrc_err + 1;
+            if (icrc_skip) n_icrc_skip = n_icrc_skip + 1;
+            if (icrc_skip)
+                $display("[DUT] ICRC  %08h SKIP (truncated)", icrc);
+            else if (icrc_ok)
+                $display("[DUT] ICRC  %08h OK", icrc);
+            else
+                $display("[DUT] ICRC  %08h BAD", icrc);
+        end
+    end
+
+    always @(posedge clk) begin
         if (rst_n && hdr_valid) begin
             if (hdr_is_truncated)
                 n_truncated = n_truncated + 1;
@@ -241,18 +313,24 @@ module tb_pcap_dpi;
             if (hdr_is_udp)  n_udp  = n_udp + 1;
             if (hdr_is_roce) n_roce = n_roce + 1;
 
-            if (hdr_is_roce)
-                $display("[HDR] dst=%012h  src=%012h  etype=0x%04h  %s  %0d.%0d.%0d.%0d:%0d -> %0d.%0d.%0d.%0d:%0d  ROCE %s qp=0x%0h psn=0x%0h pkey=0x%04h%s",
+            if (hdr_is_roce) begin
+                if (bth_ackreq)
+                    $display("[HDR] dst=%012h  src=%012h  etype=0x%04h  IPv4 ttl=%0d iplen=%0d  %0d.%0d.%0d.%0d:%0d -> %0d.%0d.%0d.%0d:%0d  ROCE %s qp=0x%0h psn=0x%0h pkey=0x%04h AckReq",
+                             dst_mac, src_mac, ethertype, ip_ttl, ip_tot_len,
+                             src_ip[31:24], src_ip[23:16], src_ip[15:8], src_ip[7:0], src_port,
+                             dst_ip[31:24], dst_ip[23:16], dst_ip[15:8], dst_ip[7:0], dst_port,
+                             bth_opname(bth_opcode), dest_qp, bth_psn, bth_pkey);
+                else
+                    $display("[HDR] dst=%012h  src=%012h  etype=0x%04h  IPv4 ttl=%0d iplen=%0d  %0d.%0d.%0d.%0d:%0d -> %0d.%0d.%0d.%0d:%0d  ROCE %s qp=0x%0h psn=0x%0h pkey=0x%04h",
+                             dst_mac, src_mac, ethertype, ip_ttl, ip_tot_len,
+                             src_ip[31:24], src_ip[23:16], src_ip[15:8], src_ip[7:0], src_port,
+                             dst_ip[31:24], dst_ip[23:16], dst_ip[15:8], dst_ip[7:0], dst_port,
+                             bth_opname(bth_opcode), dest_qp, bth_psn, bth_pkey);
+            end else
+                $display("[HDR] dst=%012h  src=%012h  etype=0x%04h  %s ttl=%0d iplen=%0d  %0d.%0d.%0d.%0d:%0d -> %0d.%0d.%0d.%0d:%0d  %s",
                          dst_mac, src_mac, ethertype,
                          hdr_is_truncated ? "TRUNC" : hdr_is_ipv4 ? "IPv4" : "NON-IPv4",
-                         src_ip[31:24], src_ip[23:16], src_ip[15:8], src_ip[7:0], src_port,
-                         dst_ip[31:24], dst_ip[23:16], dst_ip[15:8], dst_ip[7:0], dst_port,
-                         bth_opname(bth_opcode), dest_qp, bth_psn, bth_pkey,
-                         bth_ackreq ? " AckReq" : "");
-            else
-                $display("[HDR] dst=%012h  src=%012h  etype=0x%04h  %s  %0d.%0d.%0d.%0d:%0d -> %0d.%0d.%0d.%0d:%0d  %s",
-                         dst_mac, src_mac, ethertype,
-                         hdr_is_truncated ? "TRUNC" : hdr_is_ipv4 ? "IPv4" : "NON-IPv4",
+                         ip_ttl, ip_tot_len,
                          src_ip[31:24], src_ip[23:16], src_ip[15:8], src_ip[7:0], src_port,
                          dst_ip[31:24], dst_ip[23:16], dst_ip[15:8], dst_ip[7:0], dst_port,
                          hdr_is_tcp ? $sformatf("TCP %s seq=0x%08h ack=0x%08h",
@@ -267,12 +345,15 @@ module tb_pcap_dpi;
             if (trk_ack_ok)   n_ack     = n_ack + 1;
             if (trk_psn_err)  n_psn_err = n_psn_err + 1;
             if (trk_op_err)   n_op_err  = n_op_err + 1;
+            if (trk_psn_gap)  n_psn_gap = n_psn_gap + 1;
             if (trk_sess_full)
                 $display("[TRK] SESS_FULL");
             else if (trk_psn_err)
                 $display("[TRK] PSN_ERR");
             else if (trk_op_err)
                 $display("[TRK] OP_ERR");
+            else if (trk_psn_gap)
+                $display("[TRK] PSN_GAP");
             else if (trk_ack_ok)
                 $display("[TRK] ACK_OK");
             else if (trk_msg_done)
@@ -285,6 +366,8 @@ module tb_pcap_dpi;
     always @(posedge clk) begin
         if (rst_n && tcp_evt) begin
             if (tcp_hs_done)      n_hs          = n_hs + 1;
+            if (tcp_fin_ok)       n_fin         = n_fin + 1;
+            if (tcp_rst_ok)       n_rst         = n_rst + 1;
             if (tcp_seq_err)      n_tcp_seq_err = n_tcp_seq_err + 1;
             if (tcp_op_err)       n_tcp_op_err  = n_tcp_op_err + 1;
             if (tcp_sess_full)
@@ -293,6 +376,10 @@ module tb_pcap_dpi;
                 $display("[TCP] SEQ_ERR");
             else if (tcp_op_err)
                 $display("[TCP] OP_ERR");
+            else if (tcp_rst_ok)
+                $display("[TCP] RST");
+            else if (tcp_fin_ok)
+                $display("[TCP] FIN_OK");
             else if (tcp_hs_done)
                 $display("[TCP] HS_DONE");
             else if (tcp_synack_ok)
@@ -312,7 +399,8 @@ module tb_pcap_dpi;
     initial begin
         clk = 0;
         rst_n = 0;
-        tdata = 0;
+        tdata = '0;
+        tkeep = '0;
         tvalid = 0;
         tstart = 0;
         tlast = 0;
@@ -333,6 +421,13 @@ module tb_pcap_dpi;
         n_hs = 0;
         n_tcp_seq_err = 0;
         n_tcp_op_err = 0;
+        n_len_mis = 0;
+        n_fin = 0;
+        n_rst = 0;
+        n_psn_gap = 0;
+        n_icrc_ok = 0;
+        n_icrc_err = 0;
+        n_icrc_skip = 0;
         max_packets = 8;
         pace_arg = 0;
         pace = 1'b0;
@@ -359,6 +454,8 @@ module tb_pcap_dpi;
 
         dlt = get_datalink();
         $display("[SV] Datalink DLT=%0d%s", dlt, (dlt == 1) ? " (Ethernet)" : "");
+        if (DATA_W != 8)
+            $display("[SV] AXIS DATA_W=%0d (%0d bytes/beat)", DATA_W, KEEP_W);
         $display("[SV] Streaming up to %0d packets%s",
                  max_packets, pace ? $sformatf(" (PACE=1, IFG cap %0d us)", pace_max_us) : "");
 
@@ -402,19 +499,27 @@ module tb_pcap_dpi;
             prev_ts_sec  = ts_sec;
             prev_ts_usec = ts_usec;
 
-            for (i = 0; i < pkt_len; i = i + 1) begin
+            for (i = 0; i < pkt_len; i = i + KEEP_W) begin
                 @(negedge clk);
-                tdata  = get_packet_byte();
+                tdata  = '0;
+                tkeep  = '0;
+                for (k = 0; k < KEEP_W; k = k + 1) begin
+                    if ((i + k) < pkt_len) begin
+                        tdata[8*k +: 8] = get_packet_byte();
+                        tkeep[k]        = 1'b1;
+                    end
+                end
                 tvalid = 1;
                 tstart = (i == 0);
-                tlast  = (i == pkt_len - 1);
+                tlast  = ((i + KEEP_W) >= pkt_len);
             end
 
             @(negedge clk);
             tvalid = 0;
             tstart = 0;
             tlast  = 0;
-            tdata  = 0;
+            tdata  = '0;
+            tkeep  = '0;
             repeat (3) @(posedge clk);
         end
 
@@ -424,10 +529,13 @@ module tb_pcap_dpi;
                  n_runt, n_standard, n_jumbo);
         $display("[DUT] Header  ipv4=%0d  tcp=%0d  udp=%0d  roce=%0d  other=%0d  trunc=%0d",
                  n_ipv4, n_tcp, n_udp, n_roce, n_non_ipv4, n_truncated);
-        $display("[DUT] Tracker msg=%0d  ack=%0d  psn_err=%0d  op_err=%0d",
-                 n_msg, n_ack, n_psn_err, n_op_err);
-        $display("[DUT] TCP     hs=%0d  seq_err=%0d  op_err=%0d",
-                 n_hs, n_tcp_seq_err, n_tcp_op_err);
+        $display("[DUT] Tracker msg=%0d  ack=%0d  psn_err=%0d  op_err=%0d  psn_gap=%0d",
+                 n_msg, n_ack, n_psn_err, n_op_err, n_psn_gap);
+        $display("[DUT] TCP     hs=%0d  fin=%0d  rst=%0d  seq_err=%0d  op_err=%0d",
+                 n_hs, n_fin, n_rst, n_tcp_seq_err, n_tcp_op_err);
+        $display("[DUT] Length  mismatch=%0d", n_len_mis);
+        $display("[DUT] ICRC    ok=%0d  err=%0d  skip=%0d",
+                 n_icrc_ok, n_icrc_err, n_icrc_skip);
         $finish;
         end
     end

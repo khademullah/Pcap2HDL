@@ -22,7 +22,8 @@ module pkt_roce_tracker #(
     output logic        op_err,
     output logic        sess_full,
     output logic        msg_done,
-    output logic        ack_ok
+    output logic        ack_ok,
+    output logic        psn_gap
 );
 
     localparam logic [7:0] OP_SEND_FIRST     = 8'h00;
@@ -44,6 +45,7 @@ module pkt_roce_tracker #(
         logic        used;
         logic        in_msg;
         logic        wait_ack;
+        logic        saw_msg;
         logic [31:0] src_ip;
         logic [31:0] dst_ip;
         logic [23:0] dest_qp;
@@ -81,6 +83,7 @@ module pkt_roce_tracker #(
             sess_full <= 1'b0;
             msg_done  <= 1'b0;
             ack_ok    <= 1'b0;
+            psn_gap   <= 1'b0;
             for (i = 0; i < NUM_SESS; i = i + 1)
                 sess[i] <= '0;
         end else begin
@@ -90,6 +93,7 @@ module pkt_roce_tracker #(
             sess_full <= 1'b0;
             msg_done  <= 1'b0;
             ack_ok    <= 1'b0;
+            psn_gap   <= 1'b0;
 
             if (hdr_valid && is_roce) begin
                 evt_valid <= 1'b1;
@@ -138,10 +142,14 @@ module pkt_roce_tracker #(
                     if (hit >= 0) begin
                         if (sess[hit].in_msg)
                             op_err <= 1'b1;
+                        if (sess[hit].saw_msg &&
+                            (psn != (sess[hit].last_psn + 24'd1)))
+                            psn_gap <= 1'b1;
                         sess[hit].last_psn <= psn;
                         if (is_only(opcode)) begin
                             sess[hit].in_msg   <= 1'b0;
                             sess[hit].wait_ack <= 1'b1;
+                            sess[hit].saw_msg  <= 1'b1;
                             msg_done           <= 1'b1;
                         end else begin
                             sess[hit].in_msg   <= 1'b1;
@@ -158,6 +166,7 @@ module pkt_roce_tracker #(
                         if (is_last(opcode)) begin
                             sess[hit].in_msg   <= 1'b0;
                             sess[hit].wait_ack <= 1'b1;
+                            sess[hit].saw_msg  <= 1'b1;
                             msg_done           <= 1'b1;
                         end
                     end

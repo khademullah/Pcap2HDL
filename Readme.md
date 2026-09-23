@@ -6,7 +6,7 @@
 
 Replay captured network traces in a cycle-accurate SystemVerilog simulation.
 
-Pcap2HDL streams `.pcap` files into Verilator through DPI-C (`libpcap`). Each captured byte is driven on an AXI-Stream-like bus (`tdata`, `tkeep`, `tvalid`, `tstart`, `tlast`) so hardware under test can see the same frames a NIC would, with simulation time frozen for debug. Default width is 8 bits (one byte per cycle); `make AXIS_W=64` packs eight bytes per beat.
+Pcap2HDL streams `.pcap` files into Verilator through DPI-C (`libpcap`). Each captured byte is driven on an AXI-Stream-like bus (`tdata`, `tkeep`, `tvalid`, `tready`, `tstart`, `tlast`) so hardware under test can see the same frames a NIC would, with simulation time frozen for debug. Default width is 8 bits (one byte per cycle); `make AXIS_W=64` packs eight bytes per beat. DUT modules accept a beat only when `tvalid && tready`.
 
 Typical uses: early bring-up of FPGA or ASIC packet pipelines (classification, DPI, RoCE-aware paths) before silicon or a live Ethernet port is available.
 
@@ -33,7 +33,7 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 | `pkt_header_parser.sv` | L2–L4 parse; TCP flags/seq; Soft-RoCE BTH (opcode, QP, PSN, P_Key, AckReq) |
 | `pkt_roce_tracker.sv` | RoCE session CAM: PSN sequence, MSG_DONE, ACK_OK |
 | `pkt_roce_icrc.sv` | RoCEv2 ICRC: extract last 4 bytes, check; skip truncated |
-| `pkt_tcp_tracker.sv` | TCP 4-tuple CAM: SYN / SYN-ACK / HS_DONE |
+| `pkt_tcp_tracker.sv` | TCP 4-tuple CAM: SYN / SYN-ACK / HS_DONE, next-seq |
 | `pcap_reader.c` | Offline `libpcap` reader: bytes, wire length, timestamp, DLT |
 | `traffic.pcap` | Local iperf TCP trace (not in git) |
 | `soft_roce.pcap` | Local Soft-RoCEv2 trace from `scripts/soft_roce_veth.sh` |
@@ -53,11 +53,11 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 
 1. `open_pcap()` opens the file named by `+PCAP=`; `get_datalink()` reports the capture DLT.
 2. Packets are replayed up to `+MAX_PACKETS=` (default 8). After each `fetch_next_packet()`, `get_wire_len()` / `get_ts_sec()` / `get_ts_usec()` expose the pcap header (on-wire length vs stored `caplen`, capture timestamp).
-3. Bytes are updated on the clock negedge and sampled by the DUT on posedge. With `AXIS_W=64`, up to eight bytes share a beat (`tkeep` marks valid lanes).
+3. Bytes are updated on the clock negedge and sampled by the DUT on posedge when `tready` is high. With `AXIS_W=64`, up to eight bytes share a beat (`tkeep` marks valid lanes). `make BP=1` deasserts `tready` every other cycle; the master holds `tvalid` until the handshake.
 4. `pkt_size_filter` counts `tkeep` bits and pulses `pkt_done` with length class.
 5. `pkt_header_parser` latches MAC, EtherType, IPv4 (TTL, total length), L4 ports, TCP sequence/flags, and RoCE BTH.
 6. `pkt_roce_tracker` follows Send First/Middle/Last PSN per `{src,dst,qp}` and matches the reverse-direction ACK.
-7. `pkt_tcp_tracker` follows SYN / SYN-ACK / ACK and pulses `HS_DONE` when the handshake seq/ack match.
+7. `pkt_tcp_tracker` follows SYN / SYN-ACK / ACK (`HS_DONE`) and then next expected seq from TCP payload length.
 8. `pkt_roce_icrc` checks the last 4 bytes of a complete RoCEv2 frame (masked CRC32). Truncated captures are skipped.
 
 ## Build and run
@@ -67,6 +67,7 @@ make                              # traffic.pcap, 8 packets
 make PCAP=soft_roce.pcap          # Soft-RoCEv2
 make PCAP=soft_roce.pcap MAX_PACKETS=16
 make PACE=1                       # IFG from pcap timestamps (capped at 100 us)
+make BP=1                         # tready low every other cycle
 make AXIS_W=64                    # 8-byte AXI-Stream beats
 make wave                         # GTKWave on simulation_trace.vcd
 make clean
@@ -85,17 +86,19 @@ One `[HDR]` line is printed when headers are valid (after L4 ports for TCP/UDP).
 ```
 [SV] Datalink DLT=1 (Ethernet)
 [SV] Processing Packet #1 (captured 74 / wire 74 bytes) ts=1788332455.060537
-[HDR] ... IPv4 ttl=64 iplen=60  192.168.1.1:42262 -> 192.168.1.2:5201  TCP SYN seq=0x5803f137 ack=0x00000000
+[HDR] ... IPv4 ttl=64 iplen=60  192.168.1.1:42262 -> 192.168.1.2:5201  TCP SYN seq=0x5803f137 ack=0x00000000 plen=0
 [TCP] SYN_OK
 [DUT] Classified packet: 74 bytes -> STANDARD
 [SV] Processing Packet #2 ...
-[HDR] ... IPv4 ttl=64 iplen=60  192.168.1.2:5201 -> 192.168.1.1:42262  TCP SYN ACK seq=0x15c9e53f ack=0x5803f138
+[HDR] ... IPv4 ttl=64 iplen=60  192.168.1.2:5201 -> 192.168.1.1:42262  TCP SYN ACK seq=0x15c9e53f ack=0x5803f138 plen=0
 [TCP] SYNACK_OK
 ...
 [TCP] HS_DONE
 ...
+[TCP] SEQ_OK
+...
 [DUT] Header  ipv4=8  tcp=8  udp=0  roce=0  other=0  trunc=0
-[DUT] TCP     hs=1  fin=0  rst=0  seq_err=0  op_err=0
+[DUT] TCP     hs=1  fin=0  rst=0  seq_ok=5  seq_err=0  op_err=0
 [DUT] Length  mismatch=0
 [DUT] ICRC    ok=0  err=0  skip=0
 ```
@@ -136,10 +139,10 @@ Capture a new file with `sudo ./scripts/soft_roce_veth.sh setup` then `demo` (`d
 - L4: TCP/UDP ports; TCP flags, seq, ack
 - RoCEv2 BTH: opcode, dest QP, PSN, P_Key, AckReq
 - RoCEv2 ICRC: last 4 bytes checked; truncated captures skipped
-- Tracker: RoCE PSN/ACK and next-message PSN_GAP; TCP SYN / SYN-ACK / HS_DONE / FIN / RST
-- Replay: optional `+PACE=1` IFG from pcap timestamps (capped); `AXIS_W=64` eight-byte beats
+- Tracker: RoCE PSN/ACK and next-message PSN_GAP; TCP SYN / SYN-ACK / HS_DONE / next-seq (`plen`) / FIN / RST
+- Replay: optional `+PACE=1` IFG from pcap timestamps (capped); `AXIS_W=64` eight-byte beats; `tready` handshake (`+BP=1`)
 
-Not in 0.1: IPv6, VLAN, full TCP windows, `tready`. See [CHANGELOG.md](CHANGELOG.md).
+Still parked: IPv6, VLAN. See [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 

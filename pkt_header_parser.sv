@@ -1,6 +1,7 @@
 // Streaming Ethernet / IPv4 / L4 parser.
 // Soft-RoCEv2 = IPv4 + UDP port 4791. Soft-RoCEv1 = EtherType 0x8915.
 // DATA_W=8 is one byte per cycle; DATA_W=64 walks tkeep lanes in one beat.
+// Beats are accepted only when tvalid && tready.
 
 `timescale 1ns/1ps
 
@@ -12,6 +13,7 @@ module pkt_header_parser #(
     input  logic [DATA_W-1:0]   tdata,
     input  logic [DATA_W/8-1:0] tkeep,
     input  logic                tvalid,
+    input  logic                tready,
     input  logic                tstart,
     input  logic                tlast,
 
@@ -36,6 +38,7 @@ module pkt_header_parser #(
     output logic [31:0] tcp_seq,
     output logic [31:0] tcp_ack,
     output logic [7:0]  tcp_flags,
+    output logic [15:0] tcp_plen,
     output logic [7:0]  bth_opcode,
     output logic [15:0] bth_pkey,
     output logic        bth_ackreq,
@@ -54,6 +57,7 @@ module pkt_header_parser #(
     logic        hdr_issued;
     logic        saw_ipv4;
     logic [3:0]  ip_ihl;
+    logic [3:0]  tcp_doff;
 
     logic [15:0] idx_w;
     logic [7:0]  b_w;
@@ -75,6 +79,10 @@ module pkt_header_parser #(
     logic [31:0] tcp_seq_w;
     logic [31:0] tcp_ack_w;
     logic [7:0]  tcp_flags_w;
+    logic [3:0]  tcp_doff_w;
+    logic [15:0] tcp_plen_w;
+    logic [15:0] iph_w;
+    logic [15:0] tcph_w;
     logic [7:0]  bth_opcode_w;
     logic [15:0] bth_pkey_w;
     logic        bth_ackreq_w;
@@ -103,6 +111,7 @@ module pkt_header_parser #(
             hdr_issued   <= 1'b0;
             saw_ipv4     <= 1'b0;
             ip_ihl       <= 4'd5;
+            tcp_doff     <= 4'd5;
             hdr_valid    <= 1'b0;
             is_ipv4      <= 1'b0;
             is_non_ipv4  <= 1'b0;
@@ -124,6 +133,7 @@ module pkt_header_parser #(
             tcp_seq      <= 32'd0;
             tcp_ack      <= 32'd0;
             tcp_flags    <= 8'd0;
+            tcp_plen     <= 16'd0;
             bth_opcode   <= 8'd0;
             bth_pkey     <= 16'd0;
             bth_ackreq   <= 1'b0;
@@ -133,7 +143,7 @@ module pkt_header_parser #(
             hdr_valid       <= 1'b0;
             is_len_mismatch <= 1'b0;
 
-            if (tvalid) begin
+            if (tvalid && tready) begin
                 if (tstart) begin
                     idx_w         = 16'd0;
                     hdr_issued_w  = 1'b0;
@@ -152,6 +162,7 @@ module pkt_header_parser #(
                     tcp_seq_w     = 32'd0;
                     tcp_ack_w     = 32'd0;
                     tcp_flags_w   = 8'd0;
+                    tcp_doff_w    = 4'd5;
                     bth_opcode_w  = 8'd0;
                     bth_pkey_w    = 16'd0;
                     bth_ackreq_w  = 1'b0;
@@ -181,6 +192,7 @@ module pkt_header_parser #(
                     tcp_seq_w     = tcp_seq;
                     tcp_ack_w     = tcp_ack;
                     tcp_flags_w   = tcp_flags;
+                    tcp_doff_w    = tcp_doff;
                     bth_opcode_w  = bth_opcode;
                     bth_pkey_w    = bth_pkey;
                     bth_ackreq_w  = bth_ackreq;
@@ -285,6 +297,8 @@ module pkt_header_parser #(
                                 tcp_ack_w[15:8]  = b_w;
                             else if (is_tcp_now_w && (idx_w == (l4_off_w + 16'd11)))
                                 tcp_ack_w[7:0]   = b_w;
+                            else if (is_tcp_now_w && (idx_w == (l4_off_w + 16'd12)))
+                                tcp_doff_w       = (b_w[7:4] < 4'd5) ? 4'd5 : b_w[7:4];
                             else if (is_tcp_now_w && (idx_w == (l4_off_w + 16'd13)))
                                 tcp_flags_w      = b_w;
                         end
@@ -349,10 +363,18 @@ module pkt_header_parser #(
                     (idx_w != (16'd14 + ip_tot_len_w)))
                     is_len_mis_w = 1'b1;
 
+                iph_w  = {10'd0, ip_ihl_w, 2'b00};
+                tcph_w = {10'd0, tcp_doff_w, 2'b00};
+                if (is_tcp_w && (ip_tot_len_w >= (iph_w + tcph_w)))
+                    tcp_plen_w = ip_tot_len_w - iph_w - tcph_w;
+                else
+                    tcp_plen_w = 16'd0;
+
                 byte_idx     <= idx_w;
                 hdr_issued   <= hdr_issued_w;
                 saw_ipv4     <= saw_ipv4_w;
                 ip_ihl       <= ip_ihl_w;
+                tcp_doff     <= tcp_doff_w;
                 dst_mac      <= dst_mac_w;
                 src_mac      <= src_mac_w;
                 ethertype    <= ethertype_w;
@@ -366,6 +388,7 @@ module pkt_header_parser #(
                 tcp_seq      <= tcp_seq_w;
                 tcp_ack      <= tcp_ack_w;
                 tcp_flags    <= tcp_flags_w;
+                tcp_plen     <= tcp_plen_w;
                 bth_opcode   <= bth_opcode_w;
                 bth_pkey     <= bth_pkey_w;
                 bth_ackreq   <= bth_ackreq_w;

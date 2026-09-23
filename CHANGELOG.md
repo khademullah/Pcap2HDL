@@ -1,6 +1,11 @@
 # Release notes
 
-## 0.1.0 — 2026-09-23
+## Unreleased (0.2)
+
+- AXI-Stream `tready`: DUT samples only on `tvalid && tready`. `make BP=1` stalls every other cycle; classification matches 0.1.
+- TCP next-seq: payload from `iplen − IHL×4 − data-offset×4`; SYN/FIN consume one. Gate `make` → `hs=1 seq_ok=5 seq_err=0`.
+
+## 0.1.0
 
 First public cut: replay a captured Ethernet `.pcap` into Verilator and classify IPv4 TCP and Soft-RoCEv2 in cycle-accurate HDL.
 
@@ -33,6 +38,6 @@ Traces stay local (gitignored). Capture Soft-RoCE with `scripts/soft_roce_veth.s
 
 ### Not in 0.1
 
-IPv6, VLAN, IPv4 options, full TCP sequence windows, Ethernet FCS, AXI-Stream `tready`, live capture, host CSR map.
+IPv6, VLAN, IPv4 options, Ethernet FCS, live capture, host CSR map.
 
 License: MIT.

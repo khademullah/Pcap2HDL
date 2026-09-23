@@ -1,5 +1,6 @@
 // Streaming packet-length classifier.
 // Counts AXI-Stream tkeep bits (DATA_W=8 is one byte per cycle).
+// Advances only on tvalid && tready.
 
 `timescale 1ns/1ps
 
@@ -13,6 +14,7 @@ module pkt_size_filter #(
     input  logic [DATA_W-1:0]   tdata,
     input  logic [DATA_W/8-1:0] tkeep,
     input  logic                tvalid,
+    input  logic                tready,
     input  logic                tstart,
     input  logic                tlast,
 
@@ -35,6 +37,7 @@ module pkt_size_filter #(
     logic [31:0] beat_bytes;
 
     wire unused_tdata = |tdata;
+    wire fire = tvalid && tready;
 
     always_comb begin
         beat_bytes = 32'd0;
@@ -56,7 +59,7 @@ module pkt_size_filter #(
 
             unique case (state)
                 ST_IDLE: begin
-                    if (tvalid && tstart) begin
+                    if (fire && tstart) begin
                         count <= beat_bytes;
                         if (tlast)
                             classify(beat_bytes);
@@ -65,7 +68,7 @@ module pkt_size_filter #(
                     end
                 end
                 ST_COUNT: begin
-                    if (tvalid) begin
+                    if (fire) begin
                         if (tlast) begin
                             classify(count + beat_bytes);
                             count <= 32'd0;

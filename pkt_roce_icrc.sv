@@ -14,6 +14,7 @@ module pkt_roce_icrc #(
     input  logic [DATA_W-1:0]   tdata,
     input  logic [DATA_W/8-1:0] tkeep,
     input  logic                tvalid,
+    input  logic                tready,
     input  logic                tstart,
     input  logic                tlast,
     input  logic                is_roce,
@@ -92,7 +93,7 @@ module pkt_roce_icrc #(
             icrc_err   <= 1'b0;
             icrc_skip  <= 1'b0;
 
-            if (tvalid) begin
+            if (tvalid && tready) begin
                 if (tstart) begin
                     idx_w    = 16'd0;
                     ihl_w    = 4'd5;

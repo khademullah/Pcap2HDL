@@ -20,6 +20,7 @@ module tb_pcap_dpi #(
     reg [DATA_W-1:0]   tdata;
     reg [KEEP_W-1:0]   tkeep;
     reg                tvalid;
+    reg                tready;
     reg                tstart;
     reg                tlast;
 
@@ -50,6 +51,7 @@ module tb_pcap_dpi #(
     wire [31:0] tcp_seq;
     wire [31:0] tcp_ackn;
     wire [7:0]  tcp_flags;
+    wire [15:0] tcp_plen;
     wire [7:0]  bth_opcode;
     wire [15:0] bth_pkey;
     wire        bth_ackreq;
@@ -70,6 +72,7 @@ module tb_pcap_dpi #(
     wire tcp_hs_done;
     wire tcp_fin_ok;
     wire tcp_rst_ok;
+    wire tcp_seq_ok;
     wire tcp_seq_err;
     wire tcp_op_err;
     wire tcp_sess_full;
@@ -93,16 +96,18 @@ module tb_pcap_dpi #(
     int n_ipv4, n_non_ipv4, n_truncated;
     int n_tcp, n_udp, n_roce;
     int n_msg, n_ack, n_psn_err, n_op_err;
-    int n_hs, n_tcp_seq_err, n_tcp_op_err;
+    int n_hs, n_tcp_seq_ok, n_tcp_seq_err, n_tcp_op_err;
     int n_len_mis, n_fin, n_rst, n_psn_gap;
     int n_icrc_ok, n_icrc_err, n_icrc_skip;
     bit pace;
+    bit bp;
     int pace_max_us;
     int idle_cyc;
     longint prev_ts_sec;
     int prev_ts_usec;
     longint delta_us;
     int pace_arg;
+    int bp_arg;
     string pcap_name;
     string pcap_arg;
 
@@ -148,6 +153,7 @@ module tb_pcap_dpi #(
         .tdata(tdata),
         .tkeep(tkeep),
         .tvalid(tvalid),
+        .tready(tready),
         .tstart(tstart),
         .tlast(tlast),
         .pkt_done(pkt_done),
@@ -165,6 +171,7 @@ module tb_pcap_dpi #(
         .tdata(tdata),
         .tkeep(tkeep),
         .tvalid(tvalid),
+        .tready(tready),
         .tstart(tstart),
         .tlast(tlast),
         .hdr_valid(hdr_valid),
@@ -188,6 +195,7 @@ module tb_pcap_dpi #(
         .tcp_seq(tcp_seq),
         .tcp_ack(tcp_ackn),
         .tcp_flags(tcp_flags),
+        .tcp_plen(tcp_plen),
         .bth_opcode(bth_opcode),
         .bth_pkey(bth_pkey),
         .bth_ackreq(bth_ackreq),
@@ -230,12 +238,14 @@ module tb_pcap_dpi #(
         .seq(tcp_seq),
         .ack(tcp_ackn),
         .flags(tcp_flags),
+        .plen(tcp_plen),
         .evt_valid(tcp_evt),
         .syn_ok(tcp_syn_ok),
         .synack_ok(tcp_synack_ok),
         .hs_done(tcp_hs_done),
         .fin_ok(tcp_fin_ok),
         .rst_ok(tcp_rst_ok),
+        .seq_ok(tcp_seq_ok),
         .seq_err(tcp_seq_err),
         .op_err(tcp_op_err),
         .sess_full(tcp_sess_full)
@@ -249,6 +259,7 @@ module tb_pcap_dpi #(
         .tdata(tdata),
         .tkeep(tkeep),
         .tvalid(tvalid),
+        .tready(tready),
         .tstart(tstart),
         .tlast(tlast),
         .is_roce(hdr_is_roce),
@@ -261,6 +272,15 @@ module tb_pcap_dpi #(
     );
 
     always #5 clk = ~clk;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            tready <= 1'b1;
+        else if (bp)
+            tready <= ~tready;
+        else
+            tready <= 1'b1;
+    end
 
     always @(posedge clk) begin
         if (rst_n && pkt_done) begin
@@ -333,8 +353,8 @@ module tb_pcap_dpi #(
                          ip_ttl, ip_tot_len,
                          src_ip[31:24], src_ip[23:16], src_ip[15:8], src_ip[7:0], src_port,
                          dst_ip[31:24], dst_ip[23:16], dst_ip[15:8], dst_ip[7:0], dst_port,
-                         hdr_is_tcp ? $sformatf("TCP %s seq=0x%08h ack=0x%08h",
-                                                tcp_flagstr(tcp_flags), tcp_seq, tcp_ackn) :
+                         hdr_is_tcp ? $sformatf("TCP %s seq=0x%08h ack=0x%08h plen=%0d",
+                                                tcp_flagstr(tcp_flags), tcp_seq, tcp_ackn, tcp_plen) :
                          hdr_is_udp ? "UDP" : "");
         end
     end
@@ -368,6 +388,7 @@ module tb_pcap_dpi #(
             if (tcp_hs_done)      n_hs          = n_hs + 1;
             if (tcp_fin_ok)       n_fin         = n_fin + 1;
             if (tcp_rst_ok)       n_rst         = n_rst + 1;
+            if (tcp_seq_ok)       n_tcp_seq_ok  = n_tcp_seq_ok + 1;
             if (tcp_seq_err)      n_tcp_seq_err = n_tcp_seq_err + 1;
             if (tcp_op_err)       n_tcp_op_err  = n_tcp_op_err + 1;
             if (tcp_sess_full)
@@ -386,6 +407,8 @@ module tb_pcap_dpi #(
                 $display("[TCP] SYNACK_OK");
             else if (tcp_syn_ok)
                 $display("[TCP] SYN_OK");
+            else if (tcp_seq_ok)
+                $display("[TCP] SEQ_OK");
             else
                 $display("[TCP] OK");
         end
@@ -419,6 +442,7 @@ module tb_pcap_dpi #(
         n_psn_err = 0;
         n_op_err = 0;
         n_hs = 0;
+        n_tcp_seq_ok = 0;
         n_tcp_seq_err = 0;
         n_tcp_op_err = 0;
         n_len_mis = 0;
@@ -431,6 +455,8 @@ module tb_pcap_dpi #(
         max_packets = 8;
         pace_arg = 0;
         pace = 1'b0;
+        bp_arg = 0;
+        bp = 1'b0;
         pace_max_us = 100;
         prev_ts_sec = 0;
         prev_ts_usec = 0;
@@ -440,7 +466,9 @@ module tb_pcap_dpi #(
             pcap_name = pcap_arg;
         void'($value$plusargs("PACE=%d", pace_arg));
         void'($value$plusargs("PACE_MAX_US=%d", pace_max_us));
+        void'($value$plusargs("BP=%d", bp_arg));
         pace = (pace_arg != 0);
+        bp   = (bp_arg != 0);
 
         #20;
         rst_n = 1;
@@ -456,8 +484,10 @@ module tb_pcap_dpi #(
         $display("[SV] Datalink DLT=%0d%s", dlt, (dlt == 1) ? " (Ethernet)" : "");
         if (DATA_W != 8)
             $display("[SV] AXIS DATA_W=%0d (%0d bytes/beat)", DATA_W, KEEP_W);
-        $display("[SV] Streaming up to %0d packets%s",
-                 max_packets, pace ? $sformatf(" (PACE=1, IFG cap %0d us)", pace_max_us) : "");
+        $display("[SV] Streaming up to %0d packets%s%s",
+                 max_packets,
+                 pace ? $sformatf(" (PACE=1, IFG cap %0d us)", pace_max_us) : "",
+                 bp ? " (BP=1, tready 50%)" : "");
 
         while (1) begin
             if (packet_count >= max_packets) begin
@@ -512,6 +542,7 @@ module tb_pcap_dpi #(
                 tvalid = 1;
                 tstart = (i == 0);
                 tlast  = ((i + KEEP_W) >= pkt_len);
+                do @(posedge clk); while (!tready);
             end
 
             @(negedge clk);
@@ -531,8 +562,8 @@ module tb_pcap_dpi #(
                  n_ipv4, n_tcp, n_udp, n_roce, n_non_ipv4, n_truncated);
         $display("[DUT] Tracker msg=%0d  ack=%0d  psn_err=%0d  op_err=%0d  psn_gap=%0d",
                  n_msg, n_ack, n_psn_err, n_op_err, n_psn_gap);
-        $display("[DUT] TCP     hs=%0d  fin=%0d  rst=%0d  seq_err=%0d  op_err=%0d",
-                 n_hs, n_fin, n_rst, n_tcp_seq_err, n_tcp_op_err);
+        $display("[DUT] TCP     hs=%0d  fin=%0d  rst=%0d  seq_ok=%0d  seq_err=%0d  op_err=%0d",
+                 n_hs, n_fin, n_rst, n_tcp_seq_ok, n_tcp_seq_err, n_tcp_op_err);
         $display("[DUT] Length  mismatch=%0d", n_len_mis);
         $display("[DUT] ICRC    ok=%0d  err=%0d  skip=%0d",
                  n_icrc_ok, n_icrc_err, n_icrc_skip);

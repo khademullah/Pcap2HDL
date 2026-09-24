@@ -10,7 +10,7 @@ Pcap2HDL streams `.pcap` files into Verilator through DPI-C (`libpcap`). Each ca
 
 Typical uses: early bring-up of FPGA or ASIC packet pipelines (classification, DPI, RoCE-aware paths) before silicon or a live Ethernet port is available.
 
-Current release: [0.3.0](CHANGELOG.md).
+Current release: [0.3.0](CHANGELOG.md). Project site: [khademullah.github.io/Pcap2HDL](https://khademullah.github.io/Pcap2HDL/).
 
 ## Requirements
 
@@ -40,16 +40,11 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 | `dpi/pcap_reader.c` | libpcap DPI-C: read, BPF, dump, RSS, IPv4 csum |
 | `traffic.pcap` | Local iperf TCP trace (not in git) |
 | `soft_roce.pcap` | Local Soft-RoCEv2 trace from `scripts/soft_roce_veth.sh` |
-| `docs/` | Capture notes, GTKWave and Wireshark stills |
+| `docs/` | Capture notes, stills, GitHub Pages (`index.html`) |
 | `examples/` | Reference simulation logs |
 | `scripts/soft_roce_veth.sh` | veth + RXE + `ibv_rc_pingpong` capture helper |
 | `scripts/gen_pcap.py` | Tiny ARP/TCP/VXLAN/runt pcap (stdlib) |
 | `.github/workflows/ci.yml` | Generate `ci.pcap` and `make BP=2` |
-| `traffic.pcap` | Local iperf TCP trace (not in git) |
-| `soft_roce.pcap` | Local Soft-RoCEv2 trace from `scripts/soft_roce_veth.sh` |
-| `docs/` | Capture notes, GTKWave and Wireshark stills |
-| `examples/` | Reference simulation logs |
-| `scripts/soft_roce_veth.sh` | veth + RXE + `ibv_rc_pingpong` capture helper |
 
 ## Data path
 

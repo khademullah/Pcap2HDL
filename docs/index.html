@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pcap2HDL</title>
+  <meta name="description" content="Replay captured network traces in a cycle-accurate SystemVerilog simulation (Verilator + DPI-C).">
+  <link rel="icon" href="pcap2hdl-icon.png">
+  <style>
+    :root {
+      color-scheme: light;
+      --fg: #1a1d21;
+      --muted: #4b5563;
+      --line: #d8dde3;
+      --bg: #f6f7f9;
+      --card: #fff;
+      --accent: #1f4f7a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 16px/1.55 "IBM Plex Sans", "Segoe UI", Helvetica, Arial, sans-serif;
+      color: var(--fg);
+      background: var(--bg);
+    }
+    main {
+      max-width: 40rem;
+      margin: 0 auto;
+      padding: 2.5rem 1.25rem 4rem;
+    }
+    header { text-align: center; margin-bottom: 2rem; }
+    header img { width: 220px; height: auto; }
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 650;
+      margin: 1rem 0 0.4rem;
+      letter-spacing: -0.02em;
+    }
+    .lede { color: var(--muted); margin: 0; }
+    nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.65rem 1.1rem;
+      justify-content: center;
+      margin: 1.4rem 0 2rem;
+    }
+    a { color: var(--accent); text-underline-offset: 3px; }
+    section {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 1.15rem 1.25rem;
+      margin-bottom: 1rem;
+    }
+    h2 {
+      font-size: 0.78rem;
+      font-weight: 650;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 0 0 0.65rem;
+    }
+    p { margin: 0 0 0.75rem; }
+    p:last-child { margin-bottom: 0; }
+    pre {
+      margin: 0;
+      padding: 0.85rem 1rem;
+      overflow-x: auto;
+      background: #111418;
+      color: #e8edf2;
+      font: 13px/1.45 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      border-radius: 4px;
+    }
+    footer {
+      margin-top: 1.5rem;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <img src="pcap2hdl-logo.png" alt="Pcap2HDL">
+      <h1>Pcap2HDL</h1>
+      <p class="lede">Replay captured network traces in a cycle-accurate SystemVerilog simulation.</p>
+    </header>
+    <nav>
+      <a href="https://github.com/khademullah/Pcap2HDL">Repository</a>
+      <a href="https://github.com/khademullah/Pcap2HDL/blob/main/Readme.md">README</a>
+      <a href="https://github.com/khademullah/Pcap2HDL/blob/main/CONTRIBUTING.md">Contributing</a>
+      <a href="https://github.com/khademullah/Pcap2HDL/blob/main/CHANGELOG.md">Release notes</a>
+      <a href="https://github.com/khademullah/Pcap2HDL/blob/main/LICENSE">MIT License</a>
+    </nav>
+    <section>
+      <h2>What it is</h2>
+      <p>
+        Pcap2HDL streams <code>.pcap</code> files into Verilator through DPI-C (<code>libpcap</code>).
+        Each captured byte is driven on an AXI-Stream-like bus
+        (<code>tdata</code>, <code>tkeep</code>, <code>tvalid</code>, <code>tready</code>,
+        <code>tstart</code>, <code>tlast</code>) so hardware under test can see the same frames a NIC would,
+        with simulation time frozen for debug.
+      </p>
+      <p>
+        Typical uses: early bring-up of FPGA or ASIC packet pipelines (classification, DPI, RoCE-aware paths)
+        before silicon or a live Ethernet port is available. Current release:
+        <a href="https://github.com/khademullah/Pcap2HDL/blob/main/CHANGELOG.md">0.3.0</a>.
+      </p>
+    </section>
+    <section>
+      <h2>Build</h2>
+      <pre>sudo apt install build-essential libpcap-dev
+git clone https://github.com/khademullah/Pcap2HDL.git
+cd Pcap2HDL
+make MAX_PACKETS=8</pre>
+    </section>
+    <section>
+      <h2>Traces</h2>
+      <p>
+        Capture files stay local (they are gitignored). Generate a tiny ARP/TCP/VXLAN/runt pcap for CI-style gates:
+      </p>
+      <pre>python3 scripts/gen_pcap.py ci.pcap
+make PCAP=ci.pcap MAX_PACKETS=8 BP=2</pre>
+    </section>
+    <footer>
+      Hosted on GitHub Pages from <code>docs/</code>. No traces are published here.
+    </footer>
+  </main>
+</body>
+</html>

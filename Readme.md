@@ -216,7 +216,7 @@ Capture a new file with `sudo ./scripts/soft_roce_veth.sh setup` then `demo` (`d
 - RSS: Toeplitz 4-tuple in C and HDL (`tuser`); four queues, `mis=0`
 - Replay: optional `+PACE=1` IFG from pcap timestamps (capped); `AXIS_W=64` eight-byte beats; `tready` handshake (`+BP=1`); `DUMP=` writes the bus back to a pcap; `FILTER=` is libpcap BPF (`pcap_offline_filter`) with `matched` / `skipped` counts
 
-Still parked: IPv6, VLAN. See [CHANGELOG.md](CHANGELOG.md).
+Still parked: IPv6, VLAN. See [CHANGELOG.md](CHANGELOG.md). How to contribute, and why the parked items are good first PRs: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

@@ -10,7 +10,7 @@ Pcap2HDL streams `.pcap` files into Verilator through DPI-C (`libpcap`). Each ca
 
 Typical uses: early bring-up of FPGA or ASIC packet pipelines (classification, DPI, RoCE-aware paths) before silicon or a live Ethernet port is available.
 
-Current release: [0.2.0](CHANGELOG.md).
+Current release: [0.3.0](CHANGELOG.md).
 
 ## Requirements
 
@@ -214,7 +214,7 @@ Capture a new file with `sudo ./scripts/soft_roce_veth.sh setup` then `demo` (`d
 - RoCEv2 ICRC: last 4 bytes checked; truncated captures skipped
 - Tracker: RoCE PSN/ACK and next-message PSN_GAP; TCP SYN / SYN-ACK / HS_DONE / next-seq (`plen`) / FIN / RST
 - RSS: Toeplitz 4-tuple in C and HDL (`tuser`); four queues, `mis=0`
-- Replay: optional `+PACE=1` IFG from pcap timestamps (capped); `AXIS_W=64` eight-byte beats; `tready` handshake (`+BP=1`); `DUMP=` writes the bus back to a pcap; `FILTER=` is libpcap BPF before the stream
+- Replay: optional `+PACE=1` IFG from pcap timestamps (capped); `AXIS_W=64` eight-byte beats; `tready` handshake (`+BP=1`); `DUMP=` writes the bus back to a pcap; `FILTER=` is libpcap BPF (`pcap_offline_filter`) with `matched` / `skipped` counts
 
 Still parked: IPv6, VLAN. See [CHANGELOG.md](CHANGELOG.md).
 

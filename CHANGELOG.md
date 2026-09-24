@@ -1,11 +1,38 @@
 # Release notes
 
-## Unreleased (0.3)
+## 0.3.0
 
-- NIC RSS: Microsoft Toeplitz 4-tuple (IPv4 TCP/UDP) in DPI-C and HDL. `tuser` carries the C hash on the bus; `pkt_rss` recomputes after parse. Gate `mis=0`. Four queues (`hash % 4`).
-- Layout: SystemVerilog under `hdl/`, DPI-C under `dpi/`.
-- BPF skip count: `pcap_offline_filter` instead of `pcap_setfilter`. Bench prints `BPF matched=` / `skipped=` (frames dropped before the stream, not unread tail).
+C and HDL agree on RSS; libpcap reports what it dropped. Sources sit in `hdl/` and `dpi/`.
+
+### Replay (DPI-C)
+
+- BPF skip count: compile the filter, apply `pcap_offline_filter` per frame (no `pcap_setfilter`). Bench prints `BPF matched=` / `skipped=` for frames walked over while filling `MAX_PACKETS`. Unread tail of the file is neither match nor skip.
 - Default `MAX_PACKETS` is 100.
+
+### DUT
+
+- NIC RSS: Microsoft Toeplitz on the IPv4 4-tuple (TCP/UDP) or 2-tuple (other IPv4). DPI-C puts the hash on `tuser`; `pkt_rss` recomputes after parse. Gate `mis=0`. Queue = `hash % 4`.
+
+### Layout
+
+- SystemVerilog under `hdl/`, DPI-C under `dpi/`. Makefile rebuilds if those paths change.
+
+### How to check
+
+```bash
+make                                    # traffic.pcap, 100 packets; RSS mis=0
+make FILTER='tcp port 5201'             # matched=100 skipped=0
+make FILTER='udp'                       # streamed 0; skipped=1000
+make PCAP=soft_roce.pcap MAX_PACKETS=8   # roce=8 msg=1 ack=1 icrc ok=8
+make PCAP=soft_roce.pcap MAX_PACKETS=16  # msg=3 ack=3
+make AXIS_W=64 PCAP=soft_roce.pcap MAX_PACKETS=8
+```
+
+Traces stay local (gitignored). Compact handshake logs: `make MAX_PACKETS=8` → `examples/`.
+
+### Not in 0.3
+
+IPv6, VLAN, IPv4 header checksum, Ethernet FCS, live capture, host CSR map.
 
 ## 0.2.0
 
@@ -26,8 +53,8 @@ Stack-meets-HDL: libpcap decides the slice and can write the bus back; the DUT i
 ```bash
 make                                    # ipv4=8 tcp=8 hs=1 seq_ok=5 seq_err=0
 make BP=1
-make FILTER='tcp port 5201'             # same TCP gate; matched=8 skipped=0
-make FILTER='udp'                       # traffic.pcap: streamed 0, skipped=1000
+make FILTER='tcp port 5201'             # same TCP gate; BPF in C
+make FILTER='udp'                       # traffic.pcap: streamed 0
 make DUMP=replay.pcap
 make PCAP=replay.pcap
 make PCAP=soft_roce.pcap                # roce=8 msg=1 ack=1 icrc ok=8

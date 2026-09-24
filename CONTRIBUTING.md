@@ -10,7 +10,7 @@ Sources are split so a change can stay in one module: `hdl/pkt_rss.sv`, `hdl/pkt
 
 ## Pull requests only
 
-Do not push to `main`. Fork (or a feature branch), open a pull request against `main`, and wait for review. Direct commits to `main` are for the maintainer only.
+Do not push to `main`. Fork (or a feature branch), please open a pull request against `main`, and wait for review.
 
 ```bash
 git checkout -b my-change

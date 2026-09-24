@@ -25,6 +25,30 @@ See Status in [Readme.md](Readme.md) and “Not in 0.3” in [CHANGELOG.md](CHAN
 
 IPv4 header checksum (C vs HDL, `mis=0` like RSS) is the next stack-vs-hardware gate after VLAN/IPv6. Live sniff, host CSRs, and Ethernet FCS stay out unless a note in CHANGELOG says otherwise.
 
+## Stretch work
+
+Beyond the Status parked list. Keep gates green (`mis=0`, TCP `seq_ok`, RoCE `icrc ok`). Do not replace the DPI-C bench with a UVM env.
+
+### Verification
+
+- **Functional coverage** — `covergroup` on size class (runt / standard / jumbo), TCP flags (SYN, ACK, FIN, RST), and RoCEv2 opcodes already decoded by `pkt_header_parser`.
+- **C vs HDL scoreboard** — RSS already compares DPI-C hash on `tuser` with `pkt_rss`. Same pattern for IPv4 checksum, TCP seq windows, or ICRC: compute in `dpi/pcap_reader.c`, check in HDL, count `mis`. Raise on mismatch; do not only `$display`.
+
+### Parser
+
+- **ARP** — EtherType `0x0806`. Classify instead of folding into `other` / trunc. Untagged IPv4 and RoCE logs must stay the same.
+- **VXLAN** — UDP dest 4789, skip the overlay, parse the inner Ethernet/IP. Gate with a dedicated capture; default `traffic.pcap` has no VXLAN.
+
+### AXI-Stream
+
+- `tuser` already carries the RSS hash. Extra sideband (early checksum fail, drop reason) needs a new field or a documented `tuser` layout so RSS `mis=0` still holds. `tkeep` is the byte qualifier; `tstrb` only if a DUT actually needs it.
+- **Random backpressure** — `BP=1` is every other cycle. A `$urandom` stall generator must not drop or duplicate bytes (same DUT counts as `BP=0` / `BP=1`).
+
+### Tooling
+
+- **GitHub Actions** — install Verilator and `libpcap-dev`, run `make` (and `FILTER=` / RoCE if traces can live in CI). Do not commit `.pcap` files.
+- **Scapy helper** under `scripts/` — build truncated, fragmented, or fuzzed captures for the parser. Output stays gitignored; commit the command and the example log.
+
 ## How to check
 
 ```bash

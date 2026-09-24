@@ -30,7 +30,7 @@ code {
 }
 
 .wrap {
-  width: min(1080px, calc(100% - 2.4rem));
+  width: min(1360px, calc(100% - 2rem));
   margin-inline: auto;
 }
 
@@ -139,7 +139,7 @@ code {
   margin: 0 0 1.5rem;
   color: #c5d3e0;
   font-size: 1.12rem;
-  max-width: 38rem;
+  max-width: 46rem;
 }
 .cta { display: flex; flex-wrap: wrap; gap: 0.7rem; }
 .meta {
@@ -194,13 +194,33 @@ section.block h2 {
 .sub {
   margin: 0 0 1.6rem;
   color: var(--muted);
-  max-width: 40rem;
+  max-width: 54rem;
 }
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.7rem;
+  margin-top: 2rem;
+}
+.stat {
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  background: rgba(8, 20, 36, 0.35);
+}
+.stat b {
+  display: block;
+  font-size: 1.15rem;
+  color: #fff;
+  font-weight: 650;
+}
+.stat span { color: #9bb0c4; font-size: 0.85rem; }
 
 .cards {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1rem;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.85rem;
 }
 .card {
   background: var(--card);
@@ -303,7 +323,10 @@ pre {
   padding: 2rem 0 2.4rem;
   font-size: 0.92rem;
 }
-.foot a { color: #e8f0f7; }
+.foot code {
+  background: transparent;
+  color: #9bb0c4;
+}
 .foot-inner {
   display: flex;
   justify-content: space-between;
@@ -311,8 +334,34 @@ pre {
   flex-wrap: wrap;
 }
 
+.split3 {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr 1fr;
+  gap: 1.1rem;
+  align-items: start;
+}
+.duo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.1rem;
+  align-items: start;
+}
+.gap { margin-top: 1.1rem; }
+.list {
+  margin: 0;
+  padding-left: 1.15rem;
+  color: var(--muted);
+}
+.list li { margin: 0.35rem 0; }
+.card.span2 { grid-column: span 2; }
+
+@media (max-width: 1100px) {
+  .cards { grid-template-columns: repeat(2, 1fr); }
+  .stats, .split3 { grid-template-columns: 1fr 1fr; }
+}
 @media (max-width: 860px) {
-  .hero-grid, .cards, .pipe, .split { grid-template-columns: 1fr; }
+  .hero-grid, .cards, .pipe, .split, .split3, .duo, .stats { grid-template-columns: 1fr; }
   .pipe { gap: 0.4rem; }
   .top nav .hide-sm { display: none; }
+  .card.span2 { grid-column: span 1; }
 }

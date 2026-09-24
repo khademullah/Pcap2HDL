@@ -22,6 +22,7 @@
         <a class="hide-sm" href="#overview">Overview</a>
         <a class="hide-sm" href="#pipeline">Pipeline</a>
         <a class="hide-sm" href="#dut">DUT</a>
+        <a class="hide-sm" href="#run">Run</a>
         <a href="#build">Build</a>
         <a class="hide-sm" href="#contribute">Contribute</a>
         <a class="btn btn-solid" href="https://github.com/khademullah/Pcap2HDL">GitHub</a>
@@ -30,7 +31,8 @@
   </header>
 
   <section class="hero" id="top">
-    <div class="wrap hero-grid">
+    <div class="wrap">
+    <div class="hero-grid">
       <div>
         <p class="kicker">Open-source verification</p>
         <h1>Packet traces to cycle-accurate HDL</h1>
@@ -43,7 +45,7 @@
           <a class="btn btn-solid" href="https://github.com/khademullah/Pcap2HDL">View repository</a>
           <a class="btn btn-ghost" href="https://github.com/khademullah/Pcap2HDL/blob/main/Readme.md">Read the docs</a>
         </div>
-        <p class="meta">Current release 0.3.0 · MIT License · Linux / Verilator 5.032+</p>
+        <p class="meta">Tagged release 0.3.0 · Unreleased 0.4 (checksum, ARP/VXLAN, CI) · MIT · Linux / Verilator 5.032+</p>
       </div>
       <aside class="hero-panel">
         <h2>Data path</h2>
@@ -55,6 +57,13 @@
           <li><span class="n">05</span> Optional dump back to pcap</li>
         </ol>
       </aside>
+    </div>
+    <div class="stats">
+      <div class="stat"><b>AXI-Stream</b><span>tvalid / tready slave, AXIS_W 8 or 64</span></div>
+      <div class="stat"><b>C vs HDL</b><span>RSS Toeplitz and IPv4 checksum, mis=0</span></div>
+      <div class="stat"><b>RoCEv2</b><span>BTH, PSN tracker, ICRC on complete frames</span></div>
+      <div class="stat"><b>BPF</b><span>matched / skipped, unread tail not counted</span></div>
+    </div>
     </div>
   </section>
 
@@ -90,6 +99,14 @@
           <h3>ARP and VXLAN</h3>
           <p>EtherType <code>0x0806</code> is classified as ARP. UDP dest 4789 walks the overlay to the inner Ethernet type and VNI.</p>
         </article>
+        <article class="card">
+          <h3>Dump round-trip</h3>
+          <p><code>DUMP=replay.pcap</code> writes accepted beats through <code>pcap_dump</code>. Replaying that file must match the original DUT summary. Wireshark still opens it as Ethernet.</p>
+        </article>
+        <article class="card">
+          <h3>Coverage print</h3>
+          <p>End-of-run <code>[COV]</code> bins: size class, TCP SYN/ACK/FIN/RST, RoCE send vs ACK. Verilator 5.032 cannot compile <code>covergroup</code>.</p>
+        </article>
       </div>
     </div>
   </section>
@@ -110,34 +127,76 @@
 
   <section class="block" id="dut">
     <div class="wrap">
-      <h2>DUT modules</h2>
-      <p class="sub">Each block is isolated. A change in RSS does not require touching the RoCE tracker.</p>
+      <h2>DUT modules and plusargs</h2>
+      <p class="sub">Each HDL block is isolated. Runtime knobs are plusargs; changing <code>PCAP</code> or <code>MAX_PACKETS</code> does not rebuild. Changing <code>AXIS_W</code> does.</p>
+      <div class="duo">
       <table>
         <thead>
           <tr><th>Module</th><th>Role</th></tr>
         </thead>
         <tbody>
-          <tr><td>pkt_size_filter</td><td>Runt / standard / jumbo from <code>tkeep</code> popcount</td></tr>
-          <tr><td>pkt_header_parser</td><td>L2–L4, TCP flags, RoCE BTH, ARP, VXLAN</td></tr>
-          <tr><td>pkt_tcp_tracker</td><td>SYN / SYN-ACK / HS_DONE / next-seq / FIN / RST</td></tr>
-          <tr><td>pkt_roce_tracker</td><td>PSN, MSG_DONE, reverse ACK_OK, PSN_GAP</td></tr>
-          <tr><td>pkt_roce_icrc</td><td>Masked CRC32 vs last 4 bytes</td></tr>
-          <tr><td>pkt_rss</td><td>Microsoft Toeplitz 4-tuple; queue = hash % 4</td></tr>
-          <tr><td>pkt_ip_csum</td><td>RFC 1071 IPv4 header checksum vs DPI-C</td></tr>
+          <tr><td>pkt_size_filter</td><td>Runt (&lt;64) / standard / jumbo (&gt;1500) from <code>tkeep</code> popcount</td></tr>
+          <tr><td>pkt_header_parser</td><td>MAC, EtherType, IPv4 TTL/iplen, L4 ports, TCP flags/seq, RoCE BTH, ARP, VXLAN VNI</td></tr>
+          <tr><td>pkt_tcp_tracker</td><td>4-tuple CAM: SYN / SYN-ACK / HS_DONE / next-seq (<code>plen</code>) / FIN / RST</td></tr>
+          <tr><td>pkt_roce_tracker</td><td>PSN per {src,dst,qp}, MSG_DONE, reverse ACK_OK, next-message PSN_GAP</td></tr>
+          <tr><td>pkt_roce_icrc</td><td>Seed 0xdebb20e3, masked CRC32 vs last 4 bytes; truncated frames skipped</td></tr>
+          <tr><td>pkt_rss</td><td>40-byte Microsoft/Intel key; 4-tuple TCP/UDP or 2-tuple IPs; qid = hash % 4</td></tr>
+          <tr><td>pkt_ip_csum</td><td>RFC 1071 fold of the IHL words; compared with DPI-C (<code>CSUM mis=0</code>)</td></tr>
         </tbody>
       </table>
-      <figure class="media">
-        <img src="wireshark_replay.png" alt="Wireshark showing eight Ethernet frames from a dump round-trip">
-        <figcaption class="cap">Dump round-trip: AXI-Stream bytes written with <code>DUMP=replay.pcap</code> open as Ethernet in Wireshark.</figcaption>
-      </figure>
+      <table>
+        <thead>
+          <tr><th>Plusarg / make</th><th>Meaning</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>PCAP=</td><td>Capture file (default <code>traffic.pcap</code>)</td></tr>
+          <tr><td>MAX_PACKETS=</td><td>Stream cap (default 100). BPF counts matches, not file order</td></tr>
+          <tr><td>FILTER=</td><td>libpcap expression; <code>pcap_offline_filter</code> so skip is counted</td></tr>
+          <tr><td>DUMP=</td><td>Write accepted AXI-Stream bytes back to a pcap (same DLT)</td></tr>
+          <tr><td>BP=1 / BP=2</td><td>50% <code>tready</code>, or <code>$urandom</code> stalls</td></tr>
+          <tr><td>PACE=1</td><td>IFG from pcap timestamps, capped by <code>PACE_MAX_US</code> (default 100)</td></tr>
+          <tr><td>AXIS_W=8|64</td><td>Bits on <code>tdata</code>; 64 uses <code>tkeep</code> lanes</td></tr>
+        </tbody>
+      </table>
+      </div>
+      <div class="duo gap">
+        <figure class="media">
+          <img src="wireshark_replay.png" alt="Wireshark showing eight Ethernet frames from a dump round-trip">
+          <figcaption class="cap">Dump round-trip: <code>DUMP=replay.pcap</code> as Ethernet in Wireshark.</figcaption>
+        </figure>
+        <figure class="media">
+          <img src="gtkwave_8pkt.jpg" alt="GTKWave showing RoCE header signals">
+          <figcaption class="cap">GTKWave: <code>hdr_is_roce</code>, dest port 0x12b7. Run <code>make wave</code>.</figcaption>
+        </figure>
+      </div>
     </div>
   </section>
 
-  <section class="block alt" id="build">
+  <section class="block alt" id="run">
+    <div class="wrap">
+      <h2>Gates</h2>
+      <p class="sub">These summaries are what a green run looks like. Compact handshake logs live under <code>examples/</code> with <code>MAX_PACKETS=8</code>.</p>
+      <table>
+        <thead>
+          <tr><th>Command</th><th>Expect</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>make MAX_PACKETS=8</td><td>ipv4=8 tcp=8 hs=1 seq_ok=5 seq_err=0, RSS and CSUM mis=0</td></tr>
+          <tr><td>make FILTER='tcp port 5201'</td><td>BPF matched=100 skipped=0 (1000-pkt TCP file, cap 100)</td></tr>
+          <tr><td>make FILTER='udp'</td><td>streamed 0, skipped=1000 on a TCP-only capture</td></tr>
+          <tr><td>make PCAP=soft_roce.pcap MAX_PACKETS=8</td><td>roce=8 msg=1 ack=1 icrc ok=8</td></tr>
+          <tr><td>make PCAP=soft_roce.pcap MAX_PACKETS=16</td><td>msg=3 ack=3, next Send continues PSN</td></tr>
+          <tr><td>python3 scripts/gen_pcap.py ci.pcap && make PCAP=ci.pcap BP=2</td><td>arp=1 vxlan=1 CSUM mis=0, streamed 4</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="block" id="build">
     <div class="wrap">
       <h2>Build and run</h2>
-      <p class="sub">Ubuntu is the reference environment. GTKWave is optional (<code>make wave</code>).</p>
-      <div class="split">
+      <p class="sub">Ubuntu is the reference environment. Install Verilator 5.032 or later and <code>libpcap-dev</code>. GTKWave is optional (<code>make wave</code>). Soft-RoCE capture additionally needs <code>rdma-core</code>, <code>ibverbs-utils</code>, and <code>tcpdump</code> (<code>docs/soft_roce_veth.md</code>).</p>
+      <div class="split3">
         <pre>sudo apt install build-essential libpcap-dev
 git clone https://github.com/khademullah/Pcap2HDL.git
 cd Pcap2HDL
@@ -145,32 +204,57 @@ make MAX_PACKETS=8</pre>
         <pre>python3 scripts/gen_pcap.py ci.pcap
 make PCAP=ci.pcap MAX_PACKETS=8 BP=2
 make FILTER='tcp port 5201'
-make PCAP=soft_roce.pcap MAX_PACKETS=8</pre>
+make FILTER='udp'</pre>
+        <pre>make PCAP=soft_roce.pcap MAX_PACKETS=8
+make PCAP=soft_roce.pcap MAX_PACKETS=16
+make DUMP=replay.pcap
+make AXIS_W=64 PCAP=soft_roce.pcap</pre>
       </div>
       <p class="note">
-        Compact TCP handshake gate: <code>ipv4=8 tcp=8 hs=1 seq_ok=5</code>, RSS and checksum <code>mis=0</code>.
-        Synthetic CI capture: <code>arp=1 vxlan=1</code>, streamed 4.
+        <code>traffic.pcap</code> and <code>soft_roce.pcap</code> are local (gitignored). Default cap is 100 packets.
+        <code>tuser</code> carries the RSS hash; <code>tuser_err</code> is checksum-fail sideband and does not overwrite the hash.
       </p>
     </div>
   </section>
 
-  <section class="block" id="contribute">
+  <section class="block alt" id="contribute">
     <div class="wrap">
       <h2>Contribute</h2>
       <p class="sub">
-        Aimed at digital design, verification, and network-hardware engineers.
-        Parked first PRs: IPv6 and 802.1Q VLAN. Stretch work (checksum, ARP/VXLAN, random backpressure, CI) is already in tree.
+        Aimed at digital design, verification, and network-hardware engineers. Clocked handshakes and L2–L4 still matter.
+        Keep isolation: a change in <code>pkt_rss.sv</code> should not require editing the RoCE tracker.
       </p>
-      <div class="cta">
+      <div class="duo">
+        <article class="card">
+          <h3>Parked (good first PRs)</h3>
+          <ul class="list">
+            <li>IPv6 in <code>pkt_header_parser.sv</code>, keep IPv4/RoCE gates green</li>
+            <li>802.1Q VLAN: EtherType 0x8100, then inner type; untagged captures must not break</li>
+            <li>More example logs (failed handshake, malformed frames); do not commit <code>.pcap</code> files</li>
+            <li>Note on hanging a custom DUT on the same AXI-Stream</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3>Out of scope unless CHANGELOG says otherwise</h3>
+          <ul class="list">
+            <li>Live sniff, host CSR map, Ethernet FCS</li>
+            <li>Replacing the DPI-C bench with a UVM environment</li>
+            <li>A GUI around the simulator</li>
+          </ul>
+          <p class="note">Stretch items already landed: IPv4 checksum scoreboard, ARP/VXLAN, random <code>BP=2</code>, <code>scripts/gen_pcap.py</code>, GitHub Actions.</p>
+        </article>
+      </div>
+      <div class="cta gap">
         <a class="btn btn-navy" href="https://github.com/khademullah/Pcap2HDL/blob/main/CONTRIBUTING.md">Contributing guide</a>
         <a class="btn btn-line" href="https://github.com/khademullah/Pcap2HDL/blob/main/CHANGELOG.md">Release notes</a>
+        <a class="btn btn-line" href="https://github.com/khademullah/Pcap2HDL/blob/main/LICENSE">MIT License</a>
       </div>
     </div>
   </section>
 
   <footer class="foot">
     <div class="wrap foot-inner">
-      <span>Pcap2HDL · MIT · GitHub Pages from <code style="background:transparent;color:#9bb0c4">docs/</code></span>
+      <span>Pcap2HDL · MIT · GitHub Pages from <code>docs/</code></span>
       <span>No capture files are published on this site.</span>
     </div>
   </footer>

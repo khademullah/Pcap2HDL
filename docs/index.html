@@ -3,129 +3,176 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Pcap2HDL</title>
-  <meta name="description" content="Replay captured network traces in a cycle-accurate SystemVerilog simulation (Verilator + DPI-C).">
+  <title>Pcap2HDL — packet traces to HDL simulation</title>
+  <meta name="description" content="Replay Ethernet pcaps into Verilator through DPI-C. AXI-Stream DUT for IPv4 TCP, Soft-RoCEv2, RSS, and checksum bring-up.">
   <link rel="icon" href="pcap2hdl-icon.png">
-  <style>
-    :root {
-      color-scheme: light;
-      --fg: #1a1d21;
-      --muted: #4b5563;
-      --line: #d8dde3;
-      --bg: #f6f7f9;
-      --card: #fff;
-      --accent: #1f4f7a;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font: 16px/1.55 "IBM Plex Sans", "Segoe UI", Helvetica, Arial, sans-serif;
-      color: var(--fg);
-      background: var(--bg);
-    }
-    main {
-      max-width: 40rem;
-      margin: 0 auto;
-      padding: 2.5rem 1.25rem 4rem;
-    }
-    header { text-align: center; margin-bottom: 2rem; }
-    header img { width: 220px; height: auto; }
-    h1 {
-      font-size: 1.75rem;
-      font-weight: 650;
-      margin: 1rem 0 0.4rem;
-      letter-spacing: -0.02em;
-    }
-    .lede { color: var(--muted); margin: 0; }
-    nav {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.65rem 1.1rem;
-      justify-content: center;
-      margin: 1.4rem 0 2rem;
-    }
-    a { color: var(--accent); text-underline-offset: 3px; }
-    section {
-      background: var(--card);
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      padding: 1.15rem 1.25rem;
-      margin-bottom: 1rem;
-    }
-    h2 {
-      font-size: 0.78rem;
-      font-weight: 650;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--muted);
-      margin: 0 0 0.65rem;
-    }
-    p { margin: 0 0 0.75rem; }
-    p:last-child { margin-bottom: 0; }
-    pre {
-      margin: 0;
-      padding: 0.85rem 1rem;
-      overflow-x: auto;
-      background: #111418;
-      color: #e8edf2;
-      font: 13px/1.45 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-      border-radius: 4px;
-    }
-    footer {
-      margin-top: 1.5rem;
-      text-align: center;
-      color: var(--muted);
-      font-size: 0.88rem;
-    }
-  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="site.css">
 </head>
 <body>
-  <main>
-    <header>
-      <img src="pcap2hdl-logo.png" alt="Pcap2HDL">
-      <h1>Pcap2HDL</h1>
-      <p class="lede">Replay captured network traces in a cycle-accurate SystemVerilog simulation.</p>
-    </header>
-    <nav>
-      <a href="https://github.com/khademullah/Pcap2HDL">Repository</a>
-      <a href="https://github.com/khademullah/Pcap2HDL/blob/main/Readme.md">README</a>
-      <a href="https://github.com/khademullah/Pcap2HDL/blob/main/CONTRIBUTING.md">Contributing</a>
-      <a href="https://github.com/khademullah/Pcap2HDL/blob/main/CHANGELOG.md">Release notes</a>
-      <a href="https://github.com/khademullah/Pcap2HDL/blob/main/LICENSE">MIT License</a>
-    </nav>
-    <section>
-      <h2>What it is</h2>
-      <p>
-        Pcap2HDL streams <code>.pcap</code> files into Verilator through DPI-C (<code>libpcap</code>).
-        Each captured byte is driven on an AXI-Stream-like bus
-        (<code>tdata</code>, <code>tkeep</code>, <code>tvalid</code>, <code>tready</code>,
-        <code>tstart</code>, <code>tlast</code>) so hardware under test can see the same frames a NIC would,
-        with simulation time frozen for debug.
+  <header class="top">
+    <div class="wrap top-inner">
+      <a class="brand" href="#top">
+        <img src="pcap2hdl-icon.png" width="36" height="36" alt="">
+        Pcap2HDL
+      </a>
+      <nav>
+        <a class="hide-sm" href="#overview">Overview</a>
+        <a class="hide-sm" href="#pipeline">Pipeline</a>
+        <a class="hide-sm" href="#dut">DUT</a>
+        <a href="#build">Build</a>
+        <a class="hide-sm" href="#contribute">Contribute</a>
+        <a class="btn btn-solid" href="https://github.com/khademullah/Pcap2HDL">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero" id="top">
+    <div class="wrap hero-grid">
+      <div>
+        <p class="kicker">Open-source verification</p>
+        <h1>Packet traces to cycle-accurate HDL</h1>
+        <p class="lede">
+          Stream a captured <code>.pcap</code>
+          into Verilator through DPI-C. Hardware under test sees the same Ethernet frames a NIC would,
+          on an AXI-Stream bus, with simulation time frozen for debug.
+        </p>
+        <div class="cta">
+          <a class="btn btn-solid" href="https://github.com/khademullah/Pcap2HDL">View repository</a>
+          <a class="btn btn-ghost" href="https://github.com/khademullah/Pcap2HDL/blob/main/Readme.md">Read the docs</a>
+        </div>
+        <p class="meta">Current release 0.3.0 · MIT License · Linux / Verilator 5.032+</p>
+      </div>
+      <aside class="hero-panel">
+        <h2>Data path</h2>
+        <ol class="flow">
+          <li><span class="n">01</span> libpcap open, optional BPF filter</li>
+          <li><span class="n">02</span> DPI-C bytes, timestamps, DLT</li>
+          <li><span class="n">03</span> AXI-Stream <code>tvalid && tready</code></li>
+          <li><span class="n">04</span> Size, parse, TCP / RoCE, RSS, ICRC, csum</li>
+          <li><span class="n">05</span> Optional dump back to pcap</li>
+        </ol>
+      </aside>
+    </div>
+  </section>
+
+  <section class="block" id="overview">
+    <div class="wrap">
+      <h2>Built for early network silicon bring-up</h2>
+      <p class="sub">
+        Use it when an FPGA or ASIC packet pipeline needs real traffic before a live port exists.
+        Classification, DPI, RoCE-aware paths, and RSS can be gated on traces you already captured.
       </p>
-      <p>
-        Typical uses: early bring-up of FPGA or ASIC packet pipelines (classification, DPI, RoCE-aware paths)
-        before silicon or a live Ethernet port is available. Current release:
-        <a href="https://github.com/khademullah/Pcap2HDL/blob/main/CHANGELOG.md">0.3.0</a>.
-      </p>
-    </section>
-    <section>
-      <h2>Build</h2>
-      <pre>sudo apt install build-essential libpcap-dev
+      <div class="cards">
+        <article class="card">
+          <h3>DPI-C + libpcap</h3>
+          <p>Offline replay with wire length, timestamps, and DLT. <code>FILTER=</code> compiles BPF and reports match versus skip counts.</p>
+        </article>
+        <article class="card">
+          <h3>AXI-Stream slave</h3>
+          <p><code>tdata</code>, <code>tkeep</code>, <code>tvalid</code>, <code>tready</code>, <code>tstart</code>, <code>tlast</code>. Default 8 bits per cycle; <code>AXIS_W=64</code> packs eight bytes. <code>BP=1</code> or random <code>BP=2</code>.</p>
+        </article>
+        <article class="card">
+          <h3>C vs HDL scoreboard</h3>
+          <p>RSS Toeplitz hash on <code>tuser</code> and IPv4 header checksum are computed in C and checked in SystemVerilog. Gate <code>mis=0</code>.</p>
+        </article>
+        <article class="card">
+          <h3>TCP next-seq</h3>
+          <p>Handshake <code>HS_DONE</code>, then payload length from IHL and data offset. SYN/FIN consume one. In-order data is <code>SEQ_OK</code>.</p>
+        </article>
+        <article class="card">
+          <h3>Soft-RoCEv2</h3>
+          <p>UDP/4791 BTH, PSN tracker, and ICRC on the last four bytes of a complete frame. Truncated captures are skipped, not failed.</p>
+        </article>
+        <article class="card">
+          <h3>ARP and VXLAN</h3>
+          <p>EtherType <code>0x0806</code> is classified as ARP. UDP dest 4789 walks the overlay to the inner Ethernet type and VNI.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="block alt" id="pipeline">
+    <div class="wrap">
+      <h2>From pcap to DUT</h2>
+      <p class="sub">Sources sit under <code>hdl/</code> and <code>dpi/</code>. Traces stay on the machine that runs the sim (gitignored).</p>
+      <div class="pipe">
+        <div>.pcap<small>libpcap</small></div>
+        <div>BPF<small>optional FILTER</small></div>
+        <div>DPI-C<small>pcap_reader.c</small></div>
+        <div>AXI-Stream<small>tb_pcap_dpi</small></div>
+        <div>DUT<small>parse · track · RSS</small></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="dut">
+    <div class="wrap">
+      <h2>DUT modules</h2>
+      <p class="sub">Each block is isolated. A change in RSS does not require touching the RoCE tracker.</p>
+      <table>
+        <thead>
+          <tr><th>Module</th><th>Role</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>pkt_size_filter</td><td>Runt / standard / jumbo from <code>tkeep</code> popcount</td></tr>
+          <tr><td>pkt_header_parser</td><td>L2–L4, TCP flags, RoCE BTH, ARP, VXLAN</td></tr>
+          <tr><td>pkt_tcp_tracker</td><td>SYN / SYN-ACK / HS_DONE / next-seq / FIN / RST</td></tr>
+          <tr><td>pkt_roce_tracker</td><td>PSN, MSG_DONE, reverse ACK_OK, PSN_GAP</td></tr>
+          <tr><td>pkt_roce_icrc</td><td>Masked CRC32 vs last 4 bytes</td></tr>
+          <tr><td>pkt_rss</td><td>Microsoft Toeplitz 4-tuple; queue = hash % 4</td></tr>
+          <tr><td>pkt_ip_csum</td><td>RFC 1071 IPv4 header checksum vs DPI-C</td></tr>
+        </tbody>
+      </table>
+      <figure class="media">
+        <img src="wireshark_replay.png" alt="Wireshark showing eight Ethernet frames from a dump round-trip">
+        <figcaption class="cap">Dump round-trip: AXI-Stream bytes written with <code>DUMP=replay.pcap</code> open as Ethernet in Wireshark.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="block alt" id="build">
+    <div class="wrap">
+      <h2>Build and run</h2>
+      <p class="sub">Ubuntu is the reference environment. GTKWave is optional (<code>make wave</code>).</p>
+      <div class="split">
+        <pre>sudo apt install build-essential libpcap-dev
 git clone https://github.com/khademullah/Pcap2HDL.git
 cd Pcap2HDL
 make MAX_PACKETS=8</pre>
-    </section>
-    <section>
-      <h2>Traces</h2>
-      <p>
-        Capture files stay local (they are gitignored). Generate a tiny ARP/TCP/VXLAN/runt pcap for CI-style gates:
+        <pre>python3 scripts/gen_pcap.py ci.pcap
+make PCAP=ci.pcap MAX_PACKETS=8 BP=2
+make FILTER='tcp port 5201'
+make PCAP=soft_roce.pcap MAX_PACKETS=8</pre>
+      </div>
+      <p class="note">
+        Compact TCP handshake gate: <code>ipv4=8 tcp=8 hs=1 seq_ok=5</code>, RSS and checksum <code>mis=0</code>.
+        Synthetic CI capture: <code>arp=1 vxlan=1</code>, streamed 4.
       </p>
-      <pre>python3 scripts/gen_pcap.py ci.pcap
-make PCAP=ci.pcap MAX_PACKETS=8 BP=2</pre>
-    </section>
-    <footer>
-      Hosted on GitHub Pages from <code>docs/</code>. No traces are published here.
-    </footer>
-  </main>
+    </div>
+  </section>
+
+  <section class="block" id="contribute">
+    <div class="wrap">
+      <h2>Contribute</h2>
+      <p class="sub">
+        Aimed at digital design, verification, and network-hardware engineers.
+        Parked first PRs: IPv6 and 802.1Q VLAN. Stretch work (checksum, ARP/VXLAN, random backpressure, CI) is already in tree.
+      </p>
+      <div class="cta">
+        <a class="btn btn-navy" href="https://github.com/khademullah/Pcap2HDL/blob/main/CONTRIBUTING.md">Contributing guide</a>
+        <a class="btn btn-line" href="https://github.com/khademullah/Pcap2HDL/blob/main/CHANGELOG.md">Release notes</a>
+      </div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <div class="wrap foot-inner">
+      <span>Pcap2HDL · MIT · GitHub Pages from <code style="background:transparent;color:#9bb0c4">docs/</code></span>
+      <span>No capture files are published on this site.</span>
+    </div>
+  </footer>
 </body>
 </html>

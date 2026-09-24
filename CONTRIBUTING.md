@@ -8,6 +8,18 @@ Early bring-up of a network pipeline is hard: silicon and a live port are not al
 
 Sources are split so a change can stay in one module: `hdl/pkt_rss.sv`, `hdl/pkt_size_filter.sv`, `dpi/pcap_reader.c`, and so on. Keep that isolation.
 
+## Pull requests only
+
+Do not push to `main`. Fork (or a feature branch), open a pull request against `main`, and wait for review. Direct commits to `main` are for the maintainer only.
+
+```bash
+git checkout -b my-change
+# ... commit ...
+git push -u origin my-change
+```
+
+Then open a PR on GitHub. Keep gates green (`make MAX_PACKETS=8`, RoCE if you touch that path).
+
 ## What you need
 
 - Cycle-accurate thinking: bytes on `tdata` / `tkeep`, packet edges on `tstart` / `tlast`.

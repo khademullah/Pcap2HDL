@@ -56,8 +56,8 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
                                          optional dump.pcap <- libpcap
 ```
 
-1. `open_pcap()` opens the file named by `+PCAP=`; `get_datalink()` reports the capture DLT. Optional `+FILTER=` compiles a libpcap BPF program on that handle so `pcap_next()` only returns matching frames (the host stack filters; HDL still sees a normal AXI-Stream). Optional `+DUMP=` writes accepted AXI-Stream bytes back through `pcap_dump`.
-2. Packets are replayed up to `+MAX_PACKETS=` (default 8). After each `fetch_next_packet()`, `get_wire_len()` / `get_ts_sec()` / `get_ts_usec()` expose the pcap header (on-wire length vs stored `caplen`, capture timestamp).
+1. `open_pcap()` opens the file named by `+PCAP=`; `get_datalink()` reports the capture DLT. Optional `+FILTER=` compiles a libpcap BPF program; DPI-C applies `pcap_offline_filter` per frame so HDL only sees matches and the bench reports how many frames were skipped. Optional `+DUMP=` writes accepted AXI-Stream bytes back through `pcap_dump`.
+2. Packets are replayed up to `+MAX_PACKETS=` (default 100). After each `fetch_next_packet()`, `get_wire_len()` / `get_ts_sec()` / `get_ts_usec()` expose the pcap header (on-wire length vs stored `caplen`, capture timestamp).
 3. Bytes are updated on the clock negedge and sampled by the DUT on posedge when `tready` is high. With `AXIS_W=64`, up to eight bytes share a beat (`tkeep` marks valid lanes). `make BP=1` deasserts `tready` every other cycle; the master holds `tvalid` until the handshake.
 4. `pkt_size_filter` counts `tkeep` bits and pulses `pkt_done` with length class.
 5. `pkt_header_parser` latches MAC, EtherType, IPv4 (TTL, total length), L4 ports, TCP sequence/flags, and RoCE BTH.
@@ -69,7 +69,7 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 ## Build and run
 
 ```bash
-make                              # traffic.pcap, 8 packets
+make                              # traffic.pcap, 100 packets
 make PCAP=soft_roce.pcap          # Soft-RoCEv2
 make PCAP=soft_roce.pcap MAX_PACKETS=16
 make PACE=1                       # IFG from pcap timestamps (capped at 100 us)
@@ -127,7 +127,7 @@ make PCAP=replay.pcap
 
 ### BPF filter (`+FILTER=`)
 
-libpcap compiles the expression (`pcap_compile` / `pcap_setfilter`) on the offline handle. The DUT is unchanged: it only ever sees frames that pass BPF. `MAX_PACKETS` counts matches, not raw file order.
+libpcap compiles the expression (`pcap_compile`). DPI-C does not call `pcap_setfilter`; each frame goes through `pcap_offline_filter` so skipped packets are counted. The DUT is unchanged: it only ever sees frames that pass BPF. `MAX_PACKETS` counts matches, not raw file order. Skip is frames walked over while filling that cap (unread tail of the file is neither match nor skip).
 
 ```bash
 make FILTER='tcp port 5201'
@@ -135,15 +135,11 @@ make FILTER='tcp port 5201'
 
 ```
 [C-DPI] BPF filter: tcp port 5201
-[SV] Streaming up to 8 packets FILTER=tcp port 5201
+[SV] Streaming up to 100 packets FILTER=tcp port 5201
 [HDR] ... 192.168.1.1:34612 -> 192.168.1.2:5201  TCP SYN ... plen=0
 [TCP] SYN_OK
 ...
-[TCP] HS_DONE
-...
-[TCP] SEQ_OK
-[DUT] Header  ipv4=8  tcp=8  udp=0  roce=0  other=0  trunc=0
-[DUT] TCP     hs=1  fin=0  rst=0  seq_ok=5  seq_err=0  op_err=0
+[C-DPI] BPF matched=100 skipped=0
 ```
 
 A miss still opens the file; `pcap_next()` returns nothing for HDL:
@@ -155,6 +151,7 @@ make FILTER='udp'
 ```
 [C-DPI] BPF filter: udp
 [SV] Reached end of PCAP before hitting the packet cap.
+[C-DPI] BPF matched=0 skipped=1000
 [SV] Simulation finished. File=traffic.pcap  Streamed 0 packets.
 [DUT] Header  ipv4=0  tcp=0  udp=0  roce=0  other=0  trunc=0
 ```
@@ -178,7 +175,7 @@ make PCAP=soft_roce.pcap FILTER='udp port 4791'
 [DUT] ICRC    ok=8  err=0  skip=0
 ```
 
-A 1000-packet veth capture can stay one file: `make PCAP=iperf_capture.pcap FILTER='tcp port 5201' MAX_PACKETS=8`.
+A 1000-packet veth capture can stay one file: `make FILTER='tcp port 5201'` streams 100 matches (`skipped=0` if the head of the file is all TCP); `make FILTER='udp'` streams 0 and reports `skipped=1000`.
 
 ## Example: Soft-RoCE (`soft_roce.pcap`)
 

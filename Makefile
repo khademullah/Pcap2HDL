@@ -22,8 +22,8 @@ C_SOURCES  = $(DPI_DIR)/pcap_reader.c
 WAVE_FILE  = simulation_trace.vcd
 LOG_FILE   = simulation.log
 
-# Default packet cap stays small: jumbo traces are slow at 1 byte/cycle.
-MAX_PACKETS ?= 8
+# Default cap: jumbo traces are slow at 1 byte/cycle.
+MAX_PACKETS ?= 100
 # traffic.pcap = iperf TCP/IP    soft_roce.pcap = Soft-RoCEv2
 PCAP ?= traffic.pcap
 PACE ?= 0

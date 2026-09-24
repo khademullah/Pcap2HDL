@@ -4,14 +4,14 @@ Reference logs after M1–M4 (`ttl` / `iplen`, TCP handshake, RoCE PSN + AckReq)
 
 | File | Command | Gate |
 |------|---------|------|
-| [traffic_8pkt.log](traffic_8pkt.log) | `make` | `tcp=8 hs=1 seq_ok=5 seq_err=0 mismatch=0` `RSS mis=0` |
+| [traffic_8pkt.log](traffic_8pkt.log) | `make MAX_PACKETS=8` | `tcp=8 hs=1 seq_ok=5 seq_err=0 mismatch=0` `RSS mis=0` |
 | [../docs/wireshark_replay.png](../docs/wireshark_replay.png) | `make DUMP=replay.pcap` | Wireshark: 8 Ethernet frames; replay matches DUT |
-| [soft_roce_8pkt.log](soft_roce_8pkt.log) | `make PCAP=soft_roce.pcap` | `roce=8 msg=1 ack=1 psn_gap=0 icrc ok=8` |
+| [soft_roce_8pkt.log](soft_roce_8pkt.log) | `make PCAP=soft_roce.pcap MAX_PACKETS=8` | `roce=8 msg=1 ack=1 psn_gap=0 icrc ok=8` |
 | [soft_roce_16pkt.log](soft_roce_16pkt.log) | `make PCAP=soft_roce.pcap MAX_PACKETS=16` | `msg=3 ack=3 psn_gap=0` |
 | [soft_roce_gtkwave.jpg](soft_roce_gtkwave.jpg) | `make wave` | `hdr_is_roce`, `dst_port=0x12b7` |
 | (same gates) | `make BP=1` | `tready` 50%; counts unchanged |
-| (same gates) | `make FILTER='tcp port 5201'` | BPF in DPI-C; HDL still `hs=1 seq_ok=5` |
-| (0 packets) | `make FILTER='udp'` | TCP capture; end of pcap before cap |
+| (same gates) | `make FILTER='tcp port 5201'` | BPF `matched=100 skipped=0` |
+| (0 packets) | `make FILTER='udp'` | `matched=0 skipped=1000`; TCP capture |
 
 TCP handshake: SYN → SYN-ACK → ACK (`HS_DONE`), then PSH/ACK with next-expected `seq` (`SEQ_OK`). `iplen=60` on the 74-byte SYN (14+60).
 

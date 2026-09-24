@@ -4,6 +4,8 @@
 
 - NIC RSS: Microsoft Toeplitz 4-tuple (IPv4 TCP/UDP) in DPI-C and HDL. `tuser` carries the C hash on the bus; `pkt_rss` recomputes after parse. Gate `mis=0`. Four queues (`hash % 4`).
 - Layout: SystemVerilog under `hdl/`, DPI-C under `dpi/`.
+- BPF skip count: `pcap_offline_filter` instead of `pcap_setfilter`. Bench prints `BPF matched=` / `skipped=` (frames dropped before the stream, not unread tail).
+- Default `MAX_PACKETS` is 100.
 
 ## 0.2.0
 
@@ -24,8 +26,8 @@ Stack-meets-HDL: libpcap decides the slice and can write the bus back; the DUT i
 ```bash
 make                                    # ipv4=8 tcp=8 hs=1 seq_ok=5 seq_err=0
 make BP=1
-make FILTER='tcp port 5201'             # same TCP gate; BPF in C
-make FILTER='udp'                       # traffic.pcap: streamed 0
+make FILTER='tcp port 5201'             # same TCP gate; matched=8 skipped=0
+make FILTER='udp'                       # traffic.pcap: streamed 0, skipped=1000
 make DUMP=replay.pcap
 make PCAP=replay.pcap
 make PCAP=soft_roce.pcap                # roce=8 msg=1 ack=1 icrc ok=8

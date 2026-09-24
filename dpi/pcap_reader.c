@@ -18,6 +18,11 @@ static u_char dump_buf[DUMP_MAX];
 static int dump_len = 0;
 static int dump_count = 0;
 
+static struct bpf_program bpf_prog;
+static int bpf_on;
+static int bpf_skip;
+static int bpf_match;
+
 static void compute_rss(void);
 
 int open_pcap(const char* filename) {
@@ -34,37 +39,52 @@ int open_pcap(const char* filename) {
 int fetch_next_packet() {
     if (!handle) return 0;
 
-    packet_data = pcap_next(handle, &header);
-    if (packet_data == NULL) {
-        packet_data = NULL;
-        current_byte_idx = 0;
-        return 0;
+    while (1) {
+        packet_data = pcap_next(handle, &header);
+        if (packet_data == NULL) {
+            packet_data = NULL;
+            current_byte_idx = 0;
+            return 0;
+        }
+        if (bpf_on && pcap_offline_filter(&bpf_prog, &header, packet_data) == 0) {
+            bpf_skip++;
+            continue;
+        }
+        break;
     }
     current_byte_idx = 0;
+    bpf_match++;
     /* caplen is stored bytes; header.len is original on-wire length. */
     compute_rss();
     return (int)header.caplen;
 }
 
-/* libpcap BPF on the offline handle. pcap_next() then skips non-matching
- * frames so HDL only sees the slice (tcp port 5201, udp port 4791, ...). */
+/* Compile BPF but do not pcap_setfilter: fetch_next_packet() applies
+ * pcap_offline_filter so skipped frames can be counted. */
 int set_pcap_filter(const char *filter) {
-    struct bpf_program fp;
-
     if (!handle || !filter || filter[0] == '\0')
         return -1;
-    if (pcap_compile(handle, &fp, filter, 1, PCAP_NETMASK_UNKNOWN) < 0) {
+    if (bpf_on) {
+        pcap_freecode(&bpf_prog);
+        bpf_on = 0;
+    }
+    if (pcap_compile(handle, &bpf_prog, filter, 1, PCAP_NETMASK_UNKNOWN) < 0) {
         fprintf(stderr, "BPF compile failed: %s\n", pcap_geterr(handle));
         return -1;
     }
-    if (pcap_setfilter(handle, &fp) < 0) {
-        fprintf(stderr, "BPF setfilter failed: %s\n", pcap_geterr(handle));
-        pcap_freecode(&fp);
-        return -1;
-    }
-    pcap_freecode(&fp);
+    bpf_on = 1;
+    bpf_skip = 0;
+    bpf_match = 0;
     printf("[C-DPI] BPF filter: %s\n", filter);
     return 0;
+}
+
+int get_bpf_match(void) {
+    return bpf_match;
+}
+
+int get_bpf_skip(void) {
+    return bpf_skip;
 }
 
 int get_wire_len(void) {
@@ -184,6 +204,10 @@ unsigned char get_packet_byte() {
 }
 
 void close_pcap() {
+    if (bpf_on) {
+        pcap_freecode(&bpf_prog);
+        bpf_on = 0;
+    }
     if (handle) {
         pcap_close(handle);
         handle = NULL;

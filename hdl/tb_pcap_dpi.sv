@@ -15,6 +15,8 @@ module tb_pcap_dpi #(
     import "DPI-C" function byte get_packet_byte();
     import "DPI-C" function void close_pcap();
     import "DPI-C" function int set_pcap_filter(input string filter);
+    import "DPI-C" function int get_bpf_match();
+    import "DPI-C" function int get_bpf_skip();
     import "DPI-C" function int open_pcap_dump(input string filename, input int linktype);
     import "DPI-C" function void dump_put_byte(input byte b);
     import "DPI-C" function int dump_packet(input longint ts_sec, input int ts_usec, input int wire_len);
@@ -520,7 +522,7 @@ module tb_pcap_dpi #(
         n_rss_skip = 0;
         c_rss_hash = 0;
         c_rss_ok = 0;
-        max_packets = 8;
+        max_packets = 100;
         pace_arg = 0;
         pace = 1'b0;
         bp_arg = 0;
@@ -660,6 +662,9 @@ module tb_pcap_dpi #(
             $display("[SV] Wrote %0d packets to %s", dump_pkt_count(), dump_name);
             close_pcap_dump();
         end
+        if (filter_arg.len() != 0)
+            $display("[C-DPI] BPF matched=%0d skipped=%0d",
+                     get_bpf_match(), get_bpf_skip());
         $display("\n[SV] Simulation finished. File=%s  Streamed %0d packets.", pcap_name, packet_count);
         $display("[DUT] Size    runt=%0d  standard=%0d  jumbo=%0d",
                  n_runt, n_standard, n_jumbo);

@@ -1,5 +1,30 @@
 # Release notes
 
+## Unreleased (0.4)
+
+C vs HDL IPv4 checksum, ARP and VXLAN classify, random `tready`, synthetic pcap helper, GitHub Actions.
+
+### DUT / replay
+
+- `pkt_ip_csum`: RFC 1071 header checksum. DPI-C folds the same bytes; gate `CSUM mis=0`. `tuser` stays the RSS hash; `tuser_err` is C checksum-fail sideband.
+- ARP (`0x0806`) is not `other`. VXLAN (UDP dest 4789) walks the overlay to the inner Ethernet type and reports `vni`.
+- `make BP=2`: `$urandom` `tready`. DUT counts must match `BP=0`.
+- Coverage bins printed as `[COV]` (size class, TCP flags, RoCE send/ack). Verilator 5.032 does not support `covergroup`.
+
+### Tooling
+
+- `python3 scripts/gen_pcap.py ci.pcap` (stdlib; ARP + TCP SYN + VXLAN + runt).
+- `.github/workflows/ci.yml`: generate that file, `make PCAP=ci.pcap BP=2`.
+
+### How to check
+
+```bash
+python3 scripts/gen_pcap.py ci.pcap
+make PCAP=ci.pcap MAX_PACKETS=8 BP=2   # arp=1 vxlan=1 CSUM mis=0 streamed 4
+make MAX_PACKETS=8                    # ipv4=8 tcp=8 hs=1 seq_ok=5 CSUM ok=8 mis=0
+make BP=2 MAX_PACKETS=8               # same TCP gate as BP=0
+```
+
 ## 0.3.0
 
 C and HDL agree on RSS; libpcap reports what it dropped. Sources sit in `hdl/` and `dpi/`.

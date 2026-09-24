@@ -10,6 +10,8 @@ Reference logs after M1–M4 (`ttl` / `iplen`, TCP handshake, RoCE PSN + AckReq)
 | [soft_roce_16pkt.log](soft_roce_16pkt.log) | `make PCAP=soft_roce.pcap MAX_PACKETS=16` | `msg=3 ack=3 psn_gap=0` |
 | [soft_roce_gtkwave.jpg](soft_roce_gtkwave.jpg) | `make wave` | `hdr_is_roce`, `dst_port=0x12b7` |
 | (same gates) | `make BP=1` | `tready` 50%; counts unchanged |
+| (same gates) | `make BP=2` | random `tready`; counts unchanged |
+| (synthetic) | `python3 scripts/gen_pcap.py ci.pcap && make PCAP=ci.pcap BP=2` | `arp=1 vxlan=1 CSUM mis=0` streamed 4 |
 | (same gates) | `make FILTER='tcp port 5201'` | BPF `matched=100 skipped=0` |
 | (0 packets) | `make FILTER='udp'` | `matched=0 skipped=1000`; TCP capture |
 
@@ -24,6 +26,8 @@ make PCAP=replay.pcap
 make FILTER='tcp port 5201'
 make FILTER='udp'
 make PCAP=soft_roce.pcap FILTER='udp port 4791'
+python3 scripts/gen_pcap.py ci.pcap
+make PCAP=ci.pcap MAX_PACKETS=8 BP=2
 ```
 
 Main write-up: [Readme.md](../Readme.md).

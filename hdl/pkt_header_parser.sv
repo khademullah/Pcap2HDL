@@ -1,5 +1,6 @@
 // Streaming Ethernet / IPv4 / L4 parser.
 // Soft-RoCEv2 = IPv4 + UDP port 4791. Soft-RoCEv1 = EtherType 0x8915.
+// ARP = 0x0806. VXLAN = UDP dest 4789 (inner Ethernet + VNI).
 // DATA_W=8 is one byte per cycle; DATA_W=64 walks tkeep lanes in one beat.
 // Beats are accepted only when tvalid && tready.
 
@@ -24,6 +25,9 @@ module pkt_header_parser #(
     output logic        is_tcp,
     output logic        is_udp,
     output logic        is_roce,
+    output logic        is_arp,
+    output logic        is_vxlan,
+    output logic [23:0] vxlan_vni,
     output logic [47:0] dst_mac,
     output logic [47:0] src_mac,
     output logic [15:0] ethertype,
@@ -48,10 +52,12 @@ module pkt_header_parser #(
 
     localparam int KEEP_W = DATA_W / 8;
     localparam logic [15:0] ETYPE_IPV4   = 16'h0800;
+    localparam logic [15:0] ETYPE_ARP    = 16'h0806;
     localparam logic [15:0] ETYPE_ROCEV1 = 16'h8915;
     localparam logic [7:0]  PROTO_TCP    = 8'd6;
     localparam logic [7:0]  PROTO_UDP    = 8'd17;
     localparam logic [15:0] PORT_ROCEV2  = 16'd4791;
+    localparam logic [15:0] PORT_VXLAN   = 16'd4789;
 
     logic [15:0] byte_idx;
     logic        hdr_issued;
@@ -95,6 +101,9 @@ module pkt_header_parser #(
     logic        is_tcp_w;
     logic        is_udp_w;
     logic        is_roce_w;
+    logic        is_arp_w;
+    logic        is_vxlan_w;
+    logic [23:0] vxlan_vni_w;
     logic        is_len_mis_w;
     logic [15:0] l4_off_w;
     logic [15:0] l4_last_w;
@@ -104,6 +113,9 @@ module pkt_header_parser #(
     logic        needs_ports_w;
     logic        is_tcp_now_w;
     logic        roce_now_w;
+    logic        vxlan_now_w;
+    logic [15:0] vxlan_last_w;
+    logic [15:0] inner_et_w;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -119,6 +131,9 @@ module pkt_header_parser #(
             is_tcp       <= 1'b0;
             is_udp       <= 1'b0;
             is_roce      <= 1'b0;
+            is_arp       <= 1'b0;
+            is_vxlan     <= 1'b0;
+            vxlan_vni    <= 24'd0;
             dst_mac      <= 48'd0;
             src_mac      <= 48'd0;
             ethertype    <= 16'd0;
@@ -174,6 +189,10 @@ module pkt_header_parser #(
                     is_tcp_w      = 1'b0;
                     is_udp_w      = 1'b0;
                     is_roce_w     = 1'b0;
+                    is_arp_w      = 1'b0;
+                    is_vxlan_w    = 1'b0;
+                    vxlan_vni_w   = 24'd0;
+                    inner_et_w    = 16'd0;
                 end else begin
                     idx_w         = byte_idx;
                     hdr_issued_w  = hdr_issued;
@@ -204,6 +223,10 @@ module pkt_header_parser #(
                     is_tcp_w      = is_tcp;
                     is_udp_w      = is_udp;
                     is_roce_w     = is_roce;
+                    is_arp_w      = is_arp;
+                    is_vxlan_w    = is_vxlan;
+                    vxlan_vni_w   = vxlan_vni;
+                    inner_et_w    = 16'd0;
                 end
 
                 hdr_valid_w  = 1'b0;
@@ -306,6 +329,10 @@ module pkt_header_parser #(
                         roce_now_w = (ethertype_w == ETYPE_ROCEV1) ||
                                      ((ip_proto_w == PROTO_UDP) &&
                                       ((src_port_w == PORT_ROCEV2) || (dst_port_w == PORT_ROCEV2)));
+                        vxlan_now_w = (ip_proto_w == PROTO_UDP) &&
+                                      (dst_port_w == PORT_VXLAN) && !roce_now_w;
+                        vxlan_last_w = l4_off_w + 16'd15;
+                        inner_et_w   = l4_off_w + 16'd29;
 
                         if (saw_ipv4_w && roce_now_w) begin
                             if (idx_w == bth_off_w)
@@ -330,29 +357,44 @@ module pkt_header_parser #(
                                 bth_psn_w[7:0]   = b_w;
                         end
 
+                        if (saw_ipv4_w && vxlan_now_w) begin
+                            if (idx_w == (l4_off_w + 16'd11))
+                                vxlan_vni_w[23:16] = b_w;
+                            else if (idx_w == (l4_off_w + 16'd12))
+                                vxlan_vni_w[15:8] = b_w;
+                            else if (idx_w == (l4_off_w + 16'd13))
+                                vxlan_vni_w[7:0] = b_w;
+                        end
+
                         if (!hdr_issued_w) begin
-                            if (idx_w == 16'd13 && ethertype_w != ETYPE_IPV4)
-                                emit_w(1'b0, 1'b1, 1'b0);
+                            if (idx_w == 16'd13 && ethertype_w == ETYPE_ARP)
+                                emit_w(1'b0, 1'b0, 1'b0, 1'b1, 1'b0);
+                            else if (idx_w == 16'd13 && ethertype_w != ETYPE_IPV4)
+                                emit_w(1'b0, 1'b1, 1'b0, 1'b0, 1'b0);
                             else if (idx_w == 16'd13 && last_b)
-                                emit_w(1'b0, 1'b0, 1'b1);
-                            else if (saw_ipv4_w && is_tcp_now_w && !roce_now_w && idx_w == tcp_last_w)
-                                emit_w(1'b1, 1'b0, 1'b0);
-                            else if (saw_ipv4_w && needs_ports_w && !is_tcp_now_w && !roce_now_w && idx_w == l4_last_w)
-                                emit_w(1'b1, 1'b0, 1'b0);
+                                emit_w(1'b0, 1'b0, 1'b1, 1'b0, 1'b0);
+                            else if (saw_ipv4_w && is_tcp_now_w && !roce_now_w && !vxlan_now_w && idx_w == tcp_last_w)
+                                emit_w(1'b1, 1'b0, 1'b0, 1'b0, 1'b0);
+                            else if (saw_ipv4_w && needs_ports_w && !is_tcp_now_w && !roce_now_w && !vxlan_now_w && idx_w == l4_last_w)
+                                emit_w(1'b1, 1'b0, 1'b0, 1'b0, 1'b0);
                             else if (saw_ipv4_w && roce_now_w && idx_w == bth_last_w)
-                                emit_w(1'b1, 1'b0, 1'b0);
+                                emit_w(1'b1, 1'b0, 1'b0, 1'b0, 1'b0);
+                            else if (saw_ipv4_w && vxlan_now_w && idx_w == inner_et_w)
+                                emit_w(1'b1, 1'b0, 1'b0, 1'b0, 1'b1);
                             else if (saw_ipv4_w && !needs_ports_w && idx_w == 16'd33)
-                                emit_w(1'b1, 1'b0, 1'b0);
+                                emit_w(1'b1, 1'b0, 1'b0, 1'b0, 1'b0);
                             else if (last_b && idx_w < 16'd13)
-                                emit_w(1'b0, 1'b0, 1'b1);
+                                emit_w(1'b0, 1'b0, 1'b1, 1'b0, 1'b0);
                             else if (last_b && saw_ipv4_w && roce_now_w && idx_w < bth_last_w)
-                                emit_w(1'b0, 1'b0, 1'b1);
-                            else if (last_b && saw_ipv4_w && is_tcp_now_w && !roce_now_w && idx_w < tcp_last_w)
-                                emit_w(1'b0, 1'b0, 1'b1);
-                            else if (last_b && saw_ipv4_w && needs_ports_w && !is_tcp_now_w && !roce_now_w && idx_w < l4_last_w)
-                                emit_w(1'b0, 1'b0, 1'b1);
+                                emit_w(1'b0, 1'b0, 1'b1, 1'b0, 1'b0);
+                            else if (last_b && saw_ipv4_w && vxlan_now_w && idx_w < inner_et_w)
+                                emit_w(1'b0, 1'b0, 1'b1, 1'b0, 1'b0);
+                            else if (last_b && saw_ipv4_w && is_tcp_now_w && !roce_now_w && !vxlan_now_w && idx_w < tcp_last_w)
+                                emit_w(1'b0, 1'b0, 1'b1, 1'b0, 1'b0);
+                            else if (last_b && saw_ipv4_w && needs_ports_w && !is_tcp_now_w && !roce_now_w && !vxlan_now_w && idx_w < l4_last_w)
+                                emit_w(1'b0, 1'b0, 1'b1, 1'b0, 1'b0);
                             else if (last_b && saw_ipv4_w && !needs_ports_w && idx_w < 16'd33)
-                                emit_w(1'b0, 1'b0, 1'b1);
+                                emit_w(1'b0, 1'b0, 1'b1, 1'b0, 1'b0);
                         end
 
                         idx_w = idx_w + 16'd1;
@@ -401,6 +443,9 @@ module pkt_header_parser #(
                 is_tcp       <= is_tcp_w;
                 is_udp       <= is_udp_w;
                 is_roce      <= is_roce_w;
+                is_arp       <= is_arp_w;
+                is_vxlan     <= is_vxlan_w;
+                vxlan_vni    <= vxlan_vni_w;
                 is_len_mismatch <= is_len_mis_w;
             end
         end
@@ -409,16 +454,20 @@ module pkt_header_parser #(
     task automatic emit_w(
         input logic ipv4,
         input logic non_ipv4,
-        input logic trunc
+        input logic trunc,
+        input logic arp,
+        input logic vxlan
     );
         hdr_valid_w    = 1'b1;
         hdr_issued_w   = 1'b1;
-        is_ipv4_w      = ipv4;
+        is_ipv4_w      = ipv4 && !arp;
         is_non_ipv4_w  = non_ipv4;
         is_truncated_w = trunc;
-        is_tcp_w       = ipv4 && (ip_proto_w == PROTO_TCP);
-        is_udp_w       = ipv4 && (ip_proto_w == PROTO_UDP) && !roce_now_w;
-        is_roce_w      = roce_now_w;
+        is_arp_w       = arp;
+        is_vxlan_w     = vxlan;
+        is_tcp_w       = ipv4 && (ip_proto_w == PROTO_TCP) && !vxlan;
+        is_udp_w       = ipv4 && (ip_proto_w == PROTO_UDP) && !roce_now_w && !vxlan;
+        is_roce_w      = roce_now_w && !vxlan;
     endtask
 
 endmodule

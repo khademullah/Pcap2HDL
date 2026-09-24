@@ -24,6 +24,7 @@ static int bpf_skip;
 static int bpf_match;
 
 static void compute_rss(void);
+static void compute_ip_csum(void);
 
 int open_pcap(const char* filename) {
     char errbuf[PCAP_ERRBUF_SIZE];
@@ -56,6 +57,7 @@ int fetch_next_packet() {
     bpf_match++;
     /* caplen is stored bytes; header.len is original on-wire length. */
     compute_rss();
+    compute_ip_csum();
     return (int)header.caplen;
 }
 
@@ -194,6 +196,67 @@ int get_rss_valid(void)
 unsigned int get_rss_hash(void)
 {
     return rss_hash_val;
+}
+
+static int ip_csum_valid;
+static int ip_csum_ok_f;
+static unsigned ip_csum_val;
+
+static unsigned ip_csum_fold(const unsigned char *p, int n)
+{
+    unsigned s = 0;
+    int i;
+
+    for (i = 0; i + 1 < n; i += 2)
+        s += ((unsigned)p[i] << 8) | p[i + 1];
+    if (n & 1)
+        s += (unsigned)p[n - 1] << 8;
+    while (s >> 16)
+        s = (s & 0xffffu) + (s >> 16);
+    return s & 0xffffu;
+}
+
+static void compute_ip_csum(void)
+{
+    int cap, ihl, n;
+    unsigned et, folded;
+
+    ip_csum_valid = 0;
+    ip_csum_ok_f = 0;
+    ip_csum_val = 0;
+    if (!packet_data)
+        return;
+    cap = (int)header.caplen;
+    if (cap < 34)
+        return;
+    et = ((unsigned)packet_data[12] << 8) | packet_data[13];
+    if (et != 0x0800)
+        return;
+    ihl = packet_data[14] & 0x0f;
+    if (ihl < 5)
+        return;
+    n = ihl * 4;
+    if (cap < 14 + n)
+        return;
+    folded = ip_csum_fold(packet_data + 14, n);
+    ip_csum_val = folded;
+    ip_csum_valid = 1;
+    ip_csum_ok_f = (folded == 0xffff);
+}
+
+int get_ip_csum_valid(void)
+{
+    return ip_csum_valid;
+}
+
+int get_ip_csum_ok(void)
+{
+    return ip_csum_ok_f;
+}
+
+unsigned int get_ip_csum(void)
+{
+    return ip_csum_val;
 }
 
 unsigned char get_packet_byte() {

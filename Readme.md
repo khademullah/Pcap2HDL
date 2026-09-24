@@ -36,7 +36,15 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 | `hdl/pkt_tcp_tracker.sv` | TCP handshake and next-seq |
 | `hdl/pkt_roce_icrc.sv` | RoCEv2 ICRC |
 | `hdl/pkt_rss.sv` | NIC RSS Toeplitz; compared with DPI-C |
-| `dpi/pcap_reader.c` | libpcap DPI-C: read, BPF, dump, RSS hash |
+| `hdl/pkt_ip_csum.sv` | IPv4 header checksum; compared with DPI-C |
+| `dpi/pcap_reader.c` | libpcap DPI-C: read, BPF, dump, RSS, IPv4 csum |
+| `traffic.pcap` | Local iperf TCP trace (not in git) |
+| `soft_roce.pcap` | Local Soft-RoCEv2 trace from `scripts/soft_roce_veth.sh` |
+| `docs/` | Capture notes, GTKWave and Wireshark stills |
+| `examples/` | Reference simulation logs |
+| `scripts/soft_roce_veth.sh` | veth + RXE + `ibv_rc_pingpong` capture helper |
+| `scripts/gen_pcap.py` | Tiny ARP/TCP/VXLAN/runt pcap (stdlib) |
+| `.github/workflows/ci.yml` | Generate `ci.pcap` and `make BP=2` |
 | `traffic.pcap` | Local iperf TCP trace (not in git) |
 | `soft_roce.pcap` | Local Soft-RoCEv2 trace from `scripts/soft_roce_veth.sh` |
 | `docs/` | Capture notes, GTKWave and Wireshark stills |
@@ -53,18 +61,20 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
                                                          ->  pkt_tcp_tracker
                                                          ->  pkt_roce_icrc
                                                          ->  pkt_rss
+                                                         ->  pkt_ip_csum
                                          optional dump.pcap <- libpcap
 ```
 
 1. `open_pcap()` opens the file named by `+PCAP=`; `get_datalink()` reports the capture DLT. Optional `+FILTER=` compiles a libpcap BPF program; DPI-C applies `pcap_offline_filter` per frame so HDL only sees matches and the bench reports how many frames were skipped. Optional `+DUMP=` writes accepted AXI-Stream bytes back through `pcap_dump`.
 2. Packets are replayed up to `+MAX_PACKETS=` (default 100). After each `fetch_next_packet()`, `get_wire_len()` / `get_ts_sec()` / `get_ts_usec()` expose the pcap header (on-wire length vs stored `caplen`, capture timestamp).
-3. Bytes are updated on the clock negedge and sampled by the DUT on posedge when `tready` is high. With `AXIS_W=64`, up to eight bytes share a beat (`tkeep` marks valid lanes). `make BP=1` deasserts `tready` every other cycle; the master holds `tvalid` until the handshake.
+3. Bytes are updated on the clock negedge and sampled by the DUT on posedge when `tready` is high. With `AXIS_W=64`, up to eight bytes share a beat (`tkeep` marks valid lanes). `make BP=1` deasserts `tready` every other cycle; `make BP=2` uses `$urandom`. The master holds `tvalid` until the handshake.
 4. `pkt_size_filter` counts `tkeep` bits and pulses `pkt_done` with length class.
-5. `pkt_header_parser` latches MAC, EtherType, IPv4 (TTL, total length), L4 ports, TCP sequence/flags, and RoCE BTH.
+5. `pkt_header_parser` latches MAC, EtherType, IPv4 (TTL, total length), L4 ports, TCP sequence/flags, RoCE BTH, ARP (`0x0806`), and VXLAN (UDP/4789, inner Ethernet, VNI).
 6. `pkt_roce_tracker` follows Send First/Middle/Last PSN per `{src,dst,qp}` and matches the reverse-direction ACK.
 7. `pkt_tcp_tracker` follows SYN / SYN-ACK / ACK (`HS_DONE`) and then next expected seq from TCP payload length.
 8. `pkt_roce_icrc` checks the last 4 bytes of a complete RoCEv2 frame (masked CRC32). Truncated captures are skipped.
 9. `pkt_rss` computes Microsoft Toeplitz RSS on the IPv4 4-tuple (queue = hash % 4). DPI-C hashes the same bytes into `tuser`; `mis` must stay 0.
+10. `pkt_ip_csum` folds the IPv4 header (RFC 1071) and compares with DPI-C (`CSUM mis=0`). `tuser_err` flags a C-side checksum fail without changing the RSS hash.
 
 ## Build and run
 
@@ -74,6 +84,9 @@ make PCAP=soft_roce.pcap          # Soft-RoCEv2
 make PCAP=soft_roce.pcap MAX_PACKETS=16
 make PACE=1                       # IFG from pcap timestamps (capped at 100 us)
 make BP=1                         # tready low every other cycle
+make BP=2                         # random tready
+python3 scripts/gen_pcap.py ci.pcap
+make PCAP=ci.pcap MAX_PACKETS=8 BP=2
 make AXIS_W=64                    # 8-byte AXI-Stream beats
 make DUMP=replay.pcap             # write the bus back to a pcap
 make FILTER='tcp port 5201'       # libpcap BPF; HDL only sees matches
@@ -214,7 +227,10 @@ Capture a new file with `sudo ./scripts/soft_roce_veth.sh setup` then `demo` (`d
 - RoCEv2 ICRC: last 4 bytes checked; truncated captures skipped
 - Tracker: RoCE PSN/ACK and next-message PSN_GAP; TCP SYN / SYN-ACK / HS_DONE / next-seq (`plen`) / FIN / RST
 - RSS: Toeplitz 4-tuple in C and HDL (`tuser`); four queues, `mis=0`
-- Replay: optional `+PACE=1` IFG from pcap timestamps (capped); `AXIS_W=64` eight-byte beats; `tready` handshake (`+BP=1`); `DUMP=` writes the bus back to a pcap; `FILTER=` is libpcap BPF (`pcap_offline_filter`) with `matched` / `skipped` counts
+- IPv4 checksum: RFC 1071 in C and HDL (`CSUM mis=0`); `tuser_err` is fail sideband
+- ARP (`0x0806`) and VXLAN (UDP/4789, VNI, inner Ethernet)
+- Replay: optional `+PACE=1` IFG from pcap timestamps (capped); `AXIS_W=64` eight-byte beats; `tready` handshake (`+BP=1` 50%, `+BP=2` random); `DUMP=` writes the bus back to a pcap; `FILTER=` is libpcap BPF (`pcap_offline_filter`) with `matched` / `skipped` counts
+- Coverage print `[COV]` size / TCP flags / RoCE opcodes. CI: `.github/workflows/ci.yml` + `scripts/gen_pcap.py`
 
 Still parked: IPv6, VLAN. See [CHANGELOG.md](CHANGELOG.md). How to contribute, and why the parked items are good first PRs: [CONTRIBUTING.md](CONTRIBUTING.md).
 

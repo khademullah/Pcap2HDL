@@ -17,7 +17,8 @@ SV_SOURCES = \
 	$(HDL_DIR)/pkt_roce_tracker.sv \
 	$(HDL_DIR)/pkt_tcp_tracker.sv \
 	$(HDL_DIR)/pkt_roce_icrc.sv \
-	$(HDL_DIR)/pkt_rss.sv
+	$(HDL_DIR)/pkt_rss.sv \
+	$(HDL_DIR)/pkt_ip_csum.sv
 C_SOURCES  = $(DPI_DIR)/pcap_reader.c
 WAVE_FILE  = simulation_trace.vcd
 LOG_FILE   = simulation.log
@@ -100,6 +101,7 @@ help:
 	@echo "  make run PCAP=soft_roce.pcap MAX_PACKETS=16"
 	@echo "  make run PACE=1                 - IFG from pcap timestamps"
 	@echo "  make run BP=1                   - AXI-Stream tready 50% backpressure"
+	@echo "  make run BP=2                   - random tready"
 	@echo "  make run AXIS_W=64              - 8-byte AXI-Stream beats (rebuilds)"
 	@echo "  make run DUMP=replay.pcap       - write AXI-Stream frames back to pcap"
 	@echo "  make run FILTER='tcp port 5201' - libpcap BPF before the HDL stream"

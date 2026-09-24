@@ -24,6 +24,9 @@ module tb_pcap_dpi #(
     import "DPI-C" function void close_pcap_dump();
     import "DPI-C" function int get_rss_valid();
     import "DPI-C" function int unsigned get_rss_hash();
+    import "DPI-C" function int get_ip_csum_valid();
+    import "DPI-C" function int get_ip_csum_ok();
+    import "DPI-C" function int unsigned get_ip_csum();
 
     reg clk;
     reg rst_n;
@@ -34,6 +37,7 @@ module tb_pcap_dpi #(
     reg                tstart;
     reg                tlast;
     reg [31:0]         tuser;
+    reg                tuser_err;
 
     wire        pkt_done;
     wire [31:0] pkt_bytes;
@@ -48,6 +52,9 @@ module tb_pcap_dpi #(
     wire        hdr_is_tcp;
     wire        hdr_is_udp;
     wire        hdr_is_roce;
+    wire        hdr_is_arp;
+    wire        hdr_is_vxlan;
+    wire [23:0] vxlan_vni;
     wire [47:0] dst_mac;
     wire [47:0] src_mac;
     wire [15:0] ethertype;
@@ -99,6 +106,12 @@ module tb_pcap_dpi #(
     wire        icrc_err;
     wire        icrc_skip;
 
+    wire        csum_valid;
+    wire        csum_ok;
+    wire        csum_err;
+    wire        csum_skip;
+    wire [15:0] csum;
+
     int pkt_len;
     int pkt_wire;
     int dlt;
@@ -116,17 +129,23 @@ module tb_pcap_dpi #(
     int n_len_mis, n_fin, n_rst, n_psn_gap;
     int n_icrc_ok, n_icrc_err, n_icrc_skip;
     int n_rss_q0, n_rss_q1, n_rss_q2, n_rss_q3, n_rss_mis, n_rss_skip;
+    int n_arp, n_vxlan;
+    int n_csum_ok, n_csum_err, n_csum_skip, n_csum_mis;
+    int n_cov_syn, n_cov_ack, n_cov_fin, n_cov_rst;
+    int n_cov_op_send, n_cov_op_ack;
     int unsigned c_rss_hash;
     bit          c_rss_ok;
+    bit          c_csum_ok;
+    bit          c_csum_have;
+    int unsigned c_csum;
     bit pace;
-    bit bp;
+    int bp_arg;
     int pace_max_us;
     int idle_cyc;
     longint prev_ts_sec;
     int prev_ts_usec;
     longint delta_us;
     int pace_arg;
-    int bp_arg;
     string pcap_name;
     string pcap_arg;
     string dump_name;
@@ -204,6 +223,9 @@ module tb_pcap_dpi #(
         .is_tcp(hdr_is_tcp),
         .is_udp(hdr_is_udp),
         .is_roce(hdr_is_roce),
+        .is_arp(hdr_is_arp),
+        .is_vxlan(hdr_is_vxlan),
+        .vxlan_vni(vxlan_vni),
         .dst_mac(dst_mac),
         .src_mac(src_mac),
         .ethertype(ethertype),
@@ -313,13 +335,33 @@ module tb_pcap_dpi #(
         .rss_qid(rss_qid)
     );
 
+    pkt_ip_csum #(
+        .DATA_W(DATA_W)
+    ) u_csum (
+        .clk(clk),
+        .rst_n(rst_n),
+        .tdata(tdata),
+        .tkeep(tkeep),
+        .tvalid(tvalid),
+        .tready(tready),
+        .tstart(tstart),
+        .tlast(tlast),
+        .csum_valid(csum_valid),
+        .csum_ok(csum_ok),
+        .csum_err(csum_err),
+        .csum_skip(csum_skip),
+        .csum(csum)
+    );
+
     always #5 clk = ~clk;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n)
             tready <= 1'b1;
-        else if (bp)
+        else if (bp_arg == 1)
             tready <= ~tready;
+        else if (bp_arg == 2)
+            tready <= 1'($urandom_range(0, 1));
         else
             tready <= 1'b1;
     end
@@ -364,6 +406,23 @@ module tb_pcap_dpi #(
     end
 
     always @(posedge clk) begin
+        if (rst_n && csum_valid) begin
+            if (csum_ok)   n_csum_ok   = n_csum_ok + 1;
+            if (csum_err)  n_csum_err  = n_csum_err + 1;
+            if (csum_skip) n_csum_skip = n_csum_skip + 1;
+            if (csum_ok || csum_err) begin
+                if (!c_csum_have || (csum_ok != c_csum_ok) || (csum != c_csum[15:0])) begin
+                    n_csum_mis = n_csum_mis + 1;
+                    $display("[CSUM] %04h DPI=%04h MISMATCH", csum, c_csum[15:0]);
+                end else if (csum_ok)
+                    $display("[CSUM] %04h OK", csum);
+                else
+                    $display("[CSUM] %04h BAD", csum);
+            end
+        end
+    end
+
+    always @(posedge clk) begin
         if (rst_n && rss_skip)
             n_rss_skip = n_rss_skip + 1;
         if (rst_n && rss_valid) begin
@@ -386,6 +445,8 @@ module tb_pcap_dpi #(
         if (rst_n && hdr_valid) begin
             if (hdr_is_truncated)
                 n_truncated = n_truncated + 1;
+            else if (hdr_is_arp)
+                ;
             else if (hdr_is_ipv4)
                 n_ipv4 = n_ipv4 + 1;
             else
@@ -393,8 +454,31 @@ module tb_pcap_dpi #(
             if (hdr_is_tcp)  n_tcp  = n_tcp + 1;
             if (hdr_is_udp)  n_udp  = n_udp + 1;
             if (hdr_is_roce) n_roce = n_roce + 1;
-
+            if (hdr_is_arp)  n_arp  = n_arp + 1;
+            if (hdr_is_vxlan) n_vxlan = n_vxlan + 1;
+            if (hdr_is_tcp) begin
+                if (tcp_flags[1]) n_cov_syn = n_cov_syn + 1;
+                if (tcp_flags[4]) n_cov_ack = n_cov_ack + 1;
+                if (tcp_flags[0]) n_cov_fin = n_cov_fin + 1;
+                if (tcp_flags[2]) n_cov_rst = n_cov_rst + 1;
+            end
             if (hdr_is_roce) begin
+                if (bth_opcode == 8'h00 || bth_opcode == 8'h01 || bth_opcode == 8'h02)
+                    n_cov_op_send = n_cov_op_send + 1;
+                if (bth_opcode == 8'h11)
+                    n_cov_op_ack = n_cov_op_ack + 1;
+            end
+
+            if (hdr_is_arp)
+                $display("[HDR] dst=%012h  src=%012h  etype=0x%04h  ARP",
+                         dst_mac, src_mac, ethertype);
+            else if (hdr_is_vxlan)
+                $display("[HDR] dst=%012h  src=%012h  etype=0x%04h  IPv4 ttl=%0d iplen=%0d  %0d.%0d.%0d.%0d:%0d -> %0d.%0d.%0d.%0d:%0d  VXLAN vni=%0d",
+                         dst_mac, src_mac, ethertype, ip_ttl, ip_tot_len,
+                         src_ip[31:24], src_ip[23:16], src_ip[15:8], src_ip[7:0], src_port,
+                         dst_ip[31:24], dst_ip[23:16], dst_ip[15:8], dst_ip[7:0], dst_port,
+                         vxlan_vni);
+            else if (hdr_is_roce) begin
                 if (bth_ackreq)
                     $display("[HDR] dst=%012h  src=%012h  etype=0x%04h  IPv4 ttl=%0d iplen=%0d  %0d.%0d.%0d.%0d:%0d -> %0d.%0d.%0d.%0d:%0d  ROCE %s qp=0x%0h psn=0x%0h pkey=0x%04h AckReq",
                              dst_mac, src_mac, ethertype, ip_ttl, ip_tot_len,
@@ -489,6 +573,7 @@ module tb_pcap_dpi #(
         tstart = 0;
         tlast = 0;
         tuser = '0;
+        tuser_err = 1'b0;
         packet_count = 0;
         n_runt = 0;
         n_standard = 0;
@@ -520,13 +605,27 @@ module tb_pcap_dpi #(
         n_rss_q3 = 0;
         n_rss_mis = 0;
         n_rss_skip = 0;
+        n_arp = 0;
+        n_vxlan = 0;
+        n_csum_ok = 0;
+        n_csum_err = 0;
+        n_csum_skip = 0;
+        n_csum_mis = 0;
+        n_cov_syn = 0;
+        n_cov_ack = 0;
+        n_cov_fin = 0;
+        n_cov_rst = 0;
+        n_cov_op_send = 0;
+        n_cov_op_ack = 0;
         c_rss_hash = 0;
         c_rss_ok = 0;
+        c_csum_ok = 0;
+        c_csum_have = 0;
+        c_csum = 0;
         max_packets = 100;
         pace_arg = 0;
         pace = 1'b0;
         bp_arg = 0;
-        bp = 1'b0;
         pace_max_us = 100;
         prev_ts_sec = 0;
         prev_ts_usec = 0;
@@ -545,7 +644,6 @@ module tb_pcap_dpi #(
         void'($value$plusargs("PACE_MAX_US=%d", pace_max_us));
         void'($value$plusargs("BP=%d", bp_arg));
         pace = (pace_arg != 0);
-        bp   = (bp_arg != 0);
 
         #20;
         rst_n = 1;
@@ -578,7 +676,8 @@ module tb_pcap_dpi #(
         $display("[SV] Streaming up to %0d packets%s%s%s",
                  max_packets,
                  pace ? $sformatf(" (PACE=1, IFG cap %0d us)", pace_max_us) : "",
-                 bp ? " (BP=1, tready 50%)" : "",
+                 (bp_arg == 1) ? " (BP=1, tready 50%)" :
+                 (bp_arg == 2) ? " (BP=2, random tready)" : "",
                  (filter_arg.len() != 0) ? $sformatf(" FILTER=%s", filter_arg) : "");
 
         while (1) begin
@@ -599,6 +698,9 @@ module tb_pcap_dpi #(
             packet_count = packet_count + 1;
             c_rss_ok   = (get_rss_valid() != 0);
             c_rss_hash = get_rss_hash();
+            c_csum_have = (get_ip_csum_valid() != 0);
+            c_csum_ok   = (get_ip_csum_ok() != 0);
+            c_csum      = get_ip_csum();
             $display("[SV] Processing Packet #%0d (captured %0d / wire %0d bytes) ts=%0d.%06d",
                      packet_count, pkt_len, pkt_wire, ts_sec, ts_usec);
             if (pkt_len < pkt_wire)
@@ -636,7 +738,8 @@ module tb_pcap_dpi #(
                 tvalid = 1;
                 tstart = (i == 0);
                 tlast  = ((i + KEEP_W) >= pkt_len);
-                tuser  = c_rss_ok ? c_rss_hash : 32'd0;
+                tuser     = c_rss_ok ? c_rss_hash : 32'd0;
+                tuser_err = c_csum_have && !c_csum_ok;
                 do @(posedge clk); while (!tready);
                 if (dumping) begin
                     for (k = 0; k < KEEP_W; k = k + 1)
@@ -652,6 +755,7 @@ module tb_pcap_dpi #(
             tstart = 0;
             tlast  = 0;
             tuser  = '0;
+            tuser_err = 1'b0;
             tdata  = '0;
             tkeep  = '0;
             repeat (3) @(posedge clk);
@@ -668,8 +772,8 @@ module tb_pcap_dpi #(
         $display("\n[SV] Simulation finished. File=%s  Streamed %0d packets.", pcap_name, packet_count);
         $display("[DUT] Size    runt=%0d  standard=%0d  jumbo=%0d",
                  n_runt, n_standard, n_jumbo);
-        $display("[DUT] Header  ipv4=%0d  tcp=%0d  udp=%0d  roce=%0d  other=%0d  trunc=%0d",
-                 n_ipv4, n_tcp, n_udp, n_roce, n_non_ipv4, n_truncated);
+        $display("[DUT] Header  ipv4=%0d  tcp=%0d  udp=%0d  roce=%0d  arp=%0d  vxlan=%0d  other=%0d  trunc=%0d",
+                 n_ipv4, n_tcp, n_udp, n_roce, n_arp, n_vxlan, n_non_ipv4, n_truncated);
         $display("[DUT] Tracker msg=%0d  ack=%0d  psn_err=%0d  op_err=%0d  psn_gap=%0d",
                  n_msg, n_ack, n_psn_err, n_op_err, n_psn_gap);
         $display("[DUT] TCP     hs=%0d  fin=%0d  rst=%0d  seq_ok=%0d  seq_err=%0d  op_err=%0d",
@@ -677,8 +781,13 @@ module tb_pcap_dpi #(
         $display("[DUT] Length  mismatch=%0d", n_len_mis);
         $display("[DUT] ICRC    ok=%0d  err=%0d  skip=%0d",
                  n_icrc_ok, n_icrc_err, n_icrc_skip);
+        $display("[DUT] CSUM     ok=%0d  err=%0d  skip=%0d  mis=%0d",
+                 n_csum_ok, n_csum_err, n_csum_skip, n_csum_mis);
         $display("[DUT] RSS     q0=%0d  q1=%0d  q2=%0d  q3=%0d  mis=%0d  skip=%0d",
                  n_rss_q0, n_rss_q1, n_rss_q2, n_rss_q3, n_rss_mis, n_rss_skip);
+        $display("[COV] size    runt=%0d  standard=%0d  jumbo=%0d  tcp SYN=%0d ACK=%0d FIN=%0d RST=%0d  roce send=%0d ack=%0d",
+                 n_runt, n_standard, n_jumbo, n_cov_syn, n_cov_ack, n_cov_fin, n_cov_rst,
+                 n_cov_op_send, n_cov_op_ack);
         $finish;
         end
     end

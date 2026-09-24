@@ -147,6 +147,24 @@ code {
   color: #9bb0c4;
   font-size: 0.92rem;
 }
+.hero-aside {
+  display: grid;
+  gap: 1rem;
+}
+.hero-logo {
+  overflow: hidden;
+  height: 220px;
+  border-radius: 10px;
+  background: #070d16;
+}
+.hero-logo img {
+  display: block;
+  width: 100%;
+  height: 220px;
+  object-fit: cover;
+  object-position: 46% 50%;
+  transform: scale(1.65);
+}
 .hero-panel {
   background: rgba(8, 20, 36, 0.45);
   border: 1px solid rgba(255,255,255,0.1);

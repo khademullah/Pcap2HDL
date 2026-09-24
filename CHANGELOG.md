@@ -1,11 +1,39 @@
 # Release notes
 
-## Unreleased (0.2)
+## 0.2.0
 
-- AXI-Stream `tready`: DUT samples only on `tvalid && tready`. `make BP=1` stalls every other cycle; classification matches 0.1.
-- TCP next-seq: payload from `iplen − IHL×4 − data-offset×4`; SYN/FIN consume one. Gate `make` → `hs=1 seq_ok=5 seq_err=0`.
-- DPI-C dump: `make DUMP=replay.pcap` writes accepted beats (`tvalid && tready`) back to a pcap (same DLT and timestamps). Replay the dump with `make PCAP=replay.pcap`. Wireshark still: `docs/wireshark_replay.png`.
-- DPI-C BPF: `make FILTER='tcp port 5201'` compiles a libpcap filter on the offline handle; HDL only streams matches.
+Stack-meets-HDL: libpcap decides the slice and can write the bus back; the DUT is a real AXI-Stream slave with TCP next-seq.
+
+### Replay (DPI-C)
+
+- `tready`: DUT samples only on `tvalid && tready`. `make BP=1` stalls every other cycle; classification matches 0.1.
+- `DUMP=replay.pcap`: accepted beats written through `pcap_dump` (same DLT and timestamps). `make PCAP=replay.pcap` must match the original DUT summary. Wireshark still: `docs/wireshark_replay.png`.
+- `FILTER=`: `pcap_compile` / `pcap_setfilter` on the offline handle. HDL only streams matches. `MAX_PACKETS` counts hits, not file order.
+
+### DUT
+
+- TCP next-seq: payload = `iplen − IHL×4 − data-offset×4`; SYN/FIN consume one. In-order data/ACK after handshake is `SEQ_OK`.
+
+### How to check
+
+```bash
+make                                    # ipv4=8 tcp=8 hs=1 seq_ok=5 seq_err=0
+make BP=1
+make FILTER='tcp port 5201'             # same TCP gate; BPF in C
+make FILTER='udp'                       # traffic.pcap: streamed 0
+make DUMP=replay.pcap
+make PCAP=replay.pcap
+make PCAP=soft_roce.pcap                # roce=8 msg=1 ack=1 icrc ok=8
+make PCAP=soft_roce.pcap FILTER='udp port 4791'
+make PCAP=soft_roce.pcap MAX_PACKETS=16  # msg=3 ack=3
+make AXIS_W=64 PCAP=soft_roce.pcap
+```
+
+Traces stay local (gitignored).
+
+### Not in 0.2
+
+IPv6, VLAN, IPv4 options, Ethernet FCS, live capture, host CSR map.
 
 ## 0.1.0
 
@@ -37,9 +65,5 @@ make AXIS_W=64 PCAP=soft_roce.pcap
 ```
 
 Traces stay local (gitignored). Capture Soft-RoCE with `scripts/soft_roce_veth.sh`. Reference logs: `examples/`.
-
-### Not in 0.1
-
-IPv6, VLAN, IPv4 options, Ethernet FCS, live capture, host CSR map.
 
 License: MIT.

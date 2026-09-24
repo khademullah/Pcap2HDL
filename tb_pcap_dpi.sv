@@ -14,6 +14,11 @@ module tb_pcap_dpi #(
     import "DPI-C" function int get_datalink();
     import "DPI-C" function byte get_packet_byte();
     import "DPI-C" function void close_pcap();
+    import "DPI-C" function int open_pcap_dump(input string filename, input int linktype);
+    import "DPI-C" function void dump_put_byte(input byte b);
+    import "DPI-C" function int dump_packet(input longint ts_sec, input int ts_usec, input int wire_len);
+    import "DPI-C" function int dump_pkt_count();
+    import "DPI-C" function void close_pcap_dump();
 
     reg clk;
     reg rst_n;
@@ -110,6 +115,9 @@ module tb_pcap_dpi #(
     int bp_arg;
     string pcap_name;
     string pcap_arg;
+    string dump_name;
+    string dump_arg;
+    bit dumping;
 
     function automatic string bth_opname(input logic [7:0] op);
         case (op)
@@ -461,9 +469,14 @@ module tb_pcap_dpi #(
         prev_ts_sec = 0;
         prev_ts_usec = 0;
         pcap_name = "traffic.pcap";
+        dump_name = "";
+        dumping = 1'b0;
         void'($value$plusargs("MAX_PACKETS=%d", max_packets));
         if ($value$plusargs("PCAP=%s", pcap_arg) && pcap_arg.len() != 0)
             pcap_name = pcap_arg;
+        if ($value$plusargs("DUMP=%s", dump_arg) && dump_arg.len() != 0)
+            dump_name = dump_arg;
+        dumping = (dump_name.len() != 0);
         void'($value$plusargs("PACE=%d", pace_arg));
         void'($value$plusargs("PACE_MAX_US=%d", pace_max_us));
         void'($value$plusargs("BP=%d", bp_arg));
@@ -482,6 +495,13 @@ module tb_pcap_dpi #(
 
         dlt = get_datalink();
         $display("[SV] Datalink DLT=%0d%s", dlt, (dlt == 1) ? " (Ethernet)" : "");
+        if (dumping) begin
+            if (open_pcap_dump(dump_name, dlt) != 0) begin
+                $display("[SV] Failed to open dump %s. Exiting.", dump_name);
+                close_pcap();
+                $finish;
+            end
+        end
         if (DATA_W != 8)
             $display("[SV] AXIS DATA_W=%0d (%0d bytes/beat)", DATA_W, KEEP_W);
         $display("[SV] Streaming up to %0d packets%s%s",
@@ -543,6 +563,13 @@ module tb_pcap_dpi #(
                 tstart = (i == 0);
                 tlast  = ((i + KEEP_W) >= pkt_len);
                 do @(posedge clk); while (!tready);
+                if (dumping) begin
+                    for (k = 0; k < KEEP_W; k = k + 1)
+                        if (tkeep[k])
+                            dump_put_byte(tdata[8*k +: 8]);
+                    if (tlast)
+                        void'(dump_packet(ts_sec, ts_usec, pkt_wire));
+                end
             end
 
             @(negedge clk);
@@ -555,6 +582,10 @@ module tb_pcap_dpi #(
         end
 
         close_pcap();
+        if (dumping) begin
+            $display("[SV] Wrote %0d packets to %s", dump_pkt_count(), dump_name);
+            close_pcap_dump();
+        end
         $display("\n[SV] Simulation finished. File=%s  Streamed %0d packets.", pcap_name, packet_count);
         $display("[DUT] Size    runt=%0d  standard=%0d  jumbo=%0d",
                  n_runt, n_standard, n_jumbo);

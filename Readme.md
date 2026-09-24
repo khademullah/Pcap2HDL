@@ -34,10 +34,10 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 | `pkt_roce_tracker.sv` | RoCE session CAM: PSN sequence, MSG_DONE, ACK_OK |
 | `pkt_roce_icrc.sv` | RoCEv2 ICRC: extract last 4 bytes, check; skip truncated |
 | `pkt_tcp_tracker.sv` | TCP 4-tuple CAM: SYN / SYN-ACK / HS_DONE, next-seq |
-| `pcap_reader.c` | Offline `libpcap` reader: bytes, wire length, timestamp, DLT |
+| `pcap_reader.c` | Offline `libpcap` reader and AXI-Stream dump writer |
 | `traffic.pcap` | Local iperf TCP trace (not in git) |
 | `soft_roce.pcap` | Local Soft-RoCEv2 trace from `scripts/soft_roce_veth.sh` |
-| `docs/` | Capture notes, TCP GTKWave still |
+| `docs/` | Capture notes, TCP GTKWave still, dump in Wireshark |
 | `examples/` | Soft-RoCE simulation logs and GTKWave still |
 | `scripts/soft_roce_veth.sh` | veth + RXE + `ibv_rc_pingpong` capture helper |
 
@@ -49,9 +49,10 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
                                                          ->  pkt_roce_tracker
                                                          ->  pkt_tcp_tracker
                                                          ->  pkt_roce_icrc
+                              optional dump.pcap <- libpcap
 ```
 
-1. `open_pcap()` opens the file named by `+PCAP=`; `get_datalink()` reports the capture DLT.
+1. `open_pcap()` opens the file named by `+PCAP=`; `get_datalink()` reports the capture DLT. Optional `+DUMP=` writes accepted AXI-Stream bytes back through `pcap_dump`.
 2. Packets are replayed up to `+MAX_PACKETS=` (default 8). After each `fetch_next_packet()`, `get_wire_len()` / `get_ts_sec()` / `get_ts_usec()` expose the pcap header (on-wire length vs stored `caplen`, capture timestamp).
 3. Bytes are updated on the clock negedge and sampled by the DUT on posedge when `tready` is high. With `AXIS_W=64`, up to eight bytes share a beat (`tkeep` marks valid lanes). `make BP=1` deasserts `tready` every other cycle; the master holds `tvalid` until the handshake.
 4. `pkt_size_filter` counts `tkeep` bits and pulses `pkt_done` with length class.
@@ -69,6 +70,7 @@ make PCAP=soft_roce.pcap MAX_PACKETS=16
 make PACE=1                       # IFG from pcap timestamps (capped at 100 us)
 make BP=1                         # tready low every other cycle
 make AXIS_W=64                    # 8-byte AXI-Stream beats
+make DUMP=replay.pcap             # write the bus back to a pcap
 make wave                         # GTKWave on simulation_trace.vcd
 make clean
 ```
@@ -105,6 +107,15 @@ One `[HDR]` line is printed when headers are valid (after L4 ports for TCP/UDP).
 
 Waveform: `docs/gtkwave_8pkt.jpg`. Each `tvalid` burst is one frame (`tstart` / `tlast`). At millisecond zoom the 10 ns clock looks solid; zoom into a burst to see edges.
 
+### Round-trip dump (`replay.pcap`)
+
+```bash
+make DUMP=replay.pcap
+make PCAP=replay.pcap
+```
+
+`DUMP` writes accepted AXI-Stream bytes (`tvalid && tready`) back through libpcap. Replaying that file must match the original DUT summary (`hs=1 seq_ok=5 seq_err=0`). Wireshark opens `replay.pcap` as Ethernet: the same eight frames (SYN, SYN-ACK, ACK, then iperf PSH/ACK, 103-byte cookie on packet 4). Still: `docs/wireshark_replay.png`.
+
 ## Example: Soft-RoCE (`soft_roce.pcap`)
 
 ```bash
@@ -140,7 +151,7 @@ Capture a new file with `sudo ./scripts/soft_roce_veth.sh setup` then `demo` (`d
 - RoCEv2 BTH: opcode, dest QP, PSN, P_Key, AckReq
 - RoCEv2 ICRC: last 4 bytes checked; truncated captures skipped
 - Tracker: RoCE PSN/ACK and next-message PSN_GAP; TCP SYN / SYN-ACK / HS_DONE / next-seq (`plen`) / FIN / RST
-- Replay: optional `+PACE=1` IFG from pcap timestamps (capped); `AXIS_W=64` eight-byte beats; `tready` handshake (`+BP=1`)
+- Replay: optional `+PACE=1` IFG from pcap timestamps (capped); `AXIS_W=64` eight-byte beats; `tready` handshake (`+BP=1`); `DUMP=` writes the bus back to a pcap
 
 Still parked: IPv6, VLAN. See [CHANGELOG.md](CHANGELOG.md).
 

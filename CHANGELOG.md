@@ -4,6 +4,7 @@
 
 - AXI-Stream `tready`: DUT samples only on `tvalid && tready`. `make BP=1` stalls every other cycle; classification matches 0.1.
 - TCP next-seq: payload from `iplen − IHL×4 − data-offset×4`; SYN/FIN consume one. Gate `make` → `hs=1 seq_ok=5 seq_err=0`.
+- DPI-C dump: `make DUMP=replay.pcap` writes accepted beats (`tvalid && tready`) back to a pcap (same DLT and timestamps). Replay the dump with `make PCAP=replay.pcap`. Wireshark still: `docs/wireshark_replay.png`.
 
 ## 0.1.0
 

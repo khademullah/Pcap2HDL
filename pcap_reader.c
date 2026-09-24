@@ -43,6 +43,27 @@ int fetch_next_packet() {
     return (int)header.caplen;
 }
 
+/* libpcap BPF on the offline handle. pcap_next() then skips non-matching
+ * frames so HDL only sees the slice (tcp port 5201, udp port 4791, ...). */
+int set_pcap_filter(const char *filter) {
+    struct bpf_program fp;
+
+    if (!handle || !filter || filter[0] == '\0')
+        return -1;
+    if (pcap_compile(handle, &fp, filter, 1, PCAP_NETMASK_UNKNOWN) < 0) {
+        fprintf(stderr, "BPF compile failed: %s\n", pcap_geterr(handle));
+        return -1;
+    }
+    if (pcap_setfilter(handle, &fp) < 0) {
+        fprintf(stderr, "BPF setfilter failed: %s\n", pcap_geterr(handle));
+        pcap_freecode(&fp);
+        return -1;
+    }
+    pcap_freecode(&fp);
+    printf("[C-DPI] BPF filter: %s\n", filter);
+    return 0;
+}
+
 int get_wire_len(void) {
     return packet_data ? (int)header.len : 0;
 }

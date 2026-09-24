@@ -14,6 +14,7 @@ module tb_pcap_dpi #(
     import "DPI-C" function int get_datalink();
     import "DPI-C" function byte get_packet_byte();
     import "DPI-C" function void close_pcap();
+    import "DPI-C" function int set_pcap_filter(input string filter);
     import "DPI-C" function int open_pcap_dump(input string filename, input int linktype);
     import "DPI-C" function void dump_put_byte(input byte b);
     import "DPI-C" function int dump_packet(input longint ts_sec, input int ts_usec, input int wire_len);
@@ -117,6 +118,7 @@ module tb_pcap_dpi #(
     string pcap_arg;
     string dump_name;
     string dump_arg;
+    string filter_arg;
     bit dumping;
 
     function automatic string bth_opname(input logic [7:0] op);
@@ -477,6 +479,8 @@ module tb_pcap_dpi #(
         if ($value$plusargs("DUMP=%s", dump_arg) && dump_arg.len() != 0)
             dump_name = dump_arg;
         dumping = (dump_name.len() != 0);
+        filter_arg = "";
+        void'($value$plusargs("FILTER=%s", filter_arg));
         void'($value$plusargs("PACE=%d", pace_arg));
         void'($value$plusargs("PACE_MAX_US=%d", pace_max_us));
         void'($value$plusargs("BP=%d", bp_arg));
@@ -495,6 +499,13 @@ module tb_pcap_dpi #(
 
         dlt = get_datalink();
         $display("[SV] Datalink DLT=%0d%s", dlt, (dlt == 1) ? " (Ethernet)" : "");
+        if (filter_arg.len() != 0) begin
+            if (set_pcap_filter(filter_arg) != 0) begin
+                $display("[SV] Failed to install BPF filter. Exiting.");
+                close_pcap();
+                $finish;
+            end
+        end
         if (dumping) begin
             if (open_pcap_dump(dump_name, dlt) != 0) begin
                 $display("[SV] Failed to open dump %s. Exiting.", dump_name);
@@ -504,10 +515,11 @@ module tb_pcap_dpi #(
         end
         if (DATA_W != 8)
             $display("[SV] AXIS DATA_W=%0d (%0d bytes/beat)", DATA_W, KEEP_W);
-        $display("[SV] Streaming up to %0d packets%s%s",
+        $display("[SV] Streaming up to %0d packets%s%s%s",
                  max_packets,
                  pace ? $sformatf(" (PACE=1, IFG cap %0d us)", pace_max_us) : "",
-                 bp ? " (BP=1, tready 50%)" : "");
+                 bp ? " (BP=1, tready 50%)" : "",
+                 (filter_arg.len() != 0) ? $sformatf(" FILTER=%s", filter_arg) : "");
 
         while (1) begin
             if (packet_count >= max_packets) begin

@@ -34,7 +34,7 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 | `pkt_roce_tracker.sv` | RoCE session CAM: PSN sequence, MSG_DONE, ACK_OK |
 | `pkt_roce_icrc.sv` | RoCEv2 ICRC: extract last 4 bytes, check; skip truncated |
 | `pkt_tcp_tracker.sv` | TCP 4-tuple CAM: SYN / SYN-ACK / HS_DONE, next-seq |
-| `pcap_reader.c` | Offline `libpcap` reader and AXI-Stream dump writer |
+| `pcap_reader.c` | Offline `libpcap` reader, BPF filter, AXI-Stream dump writer |
 | `traffic.pcap` | Local iperf TCP trace (not in git) |
 | `soft_roce.pcap` | Local Soft-RoCEv2 trace from `scripts/soft_roce_veth.sh` |
 | `docs/` | Capture notes, TCP GTKWave still, dump in Wireshark |
@@ -44,15 +44,16 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 ## Data path
 
 ```
-.pcap  ->  libpcap (DPI-C)  ->  testbench byte stream  ->  pkt_size_filter
-                                                         ->  pkt_header_parser
-                                                         ->  pkt_roce_tracker
-                                                         ->  pkt_tcp_tracker
-                                                         ->  pkt_roce_icrc
-                              optional dump.pcap <- libpcap
+.pcap  ->  libpcap BPF (optional FILTER)  ->  DPI-C  ->  AXI-Stream DUT
+                                                              ->  pkt_size_filter
+                                                              ->  pkt_header_parser
+                                                              ->  pkt_roce_tracker
+                                                              ->  pkt_tcp_tracker
+                                                              ->  pkt_roce_icrc
+                                         optional dump.pcap <- libpcap
 ```
 
-1. `open_pcap()` opens the file named by `+PCAP=`; `get_datalink()` reports the capture DLT. Optional `+DUMP=` writes accepted AXI-Stream bytes back through `pcap_dump`.
+1. `open_pcap()` opens the file named by `+PCAP=`; `get_datalink()` reports the capture DLT. Optional `+FILTER=` compiles a libpcap BPF program on that handle so `pcap_next()` only returns matching frames (the host stack filters; HDL still sees a normal AXI-Stream). Optional `+DUMP=` writes accepted AXI-Stream bytes back through `pcap_dump`.
 2. Packets are replayed up to `+MAX_PACKETS=` (default 8). After each `fetch_next_packet()`, `get_wire_len()` / `get_ts_sec()` / `get_ts_usec()` expose the pcap header (on-wire length vs stored `caplen`, capture timestamp).
 3. Bytes are updated on the clock negedge and sampled by the DUT on posedge when `tready` is high. With `AXIS_W=64`, up to eight bytes share a beat (`tkeep` marks valid lanes). `make BP=1` deasserts `tready` every other cycle; the master holds `tvalid` until the handshake.
 4. `pkt_size_filter` counts `tkeep` bits and pulses `pkt_done` with length class.
@@ -71,6 +72,9 @@ make PACE=1                       # IFG from pcap timestamps (capped at 100 us)
 make BP=1                         # tready low every other cycle
 make AXIS_W=64                    # 8-byte AXI-Stream beats
 make DUMP=replay.pcap             # write the bus back to a pcap
+make FILTER='tcp port 5201'       # libpcap BPF; HDL only sees matches
+make FILTER='udp'                 # no UDP in traffic.pcap; streamed 0
+make PCAP=soft_roce.pcap FILTER='udp port 4791'
 make wave                         # GTKWave on simulation_trace.vcd
 make clean
 ```
@@ -116,11 +120,67 @@ make PCAP=replay.pcap
 
 `DUMP` writes accepted AXI-Stream bytes (`tvalid && tready`) back through libpcap. Replaying that file must match the original DUT summary (`hs=1 seq_ok=5 seq_err=0`). Wireshark opens `replay.pcap` as Ethernet: the same eight frames (SYN, SYN-ACK, ACK, then iperf PSH/ACK, 103-byte cookie on packet 4). Still: `docs/wireshark_replay.png`.
 
+### BPF filter (`+FILTER=`)
+
+libpcap compiles the expression (`pcap_compile` / `pcap_setfilter`) on the offline handle. The DUT is unchanged: it only ever sees frames that pass BPF. `MAX_PACKETS` counts matches, not raw file order.
+
+```bash
+make FILTER='tcp port 5201'
+```
+
+```
+[C-DPI] BPF filter: tcp port 5201
+[SV] Streaming up to 8 packets FILTER=tcp port 5201
+[HDR] ... 192.168.1.1:34612 -> 192.168.1.2:5201  TCP SYN ... plen=0
+[TCP] SYN_OK
+...
+[TCP] HS_DONE
+...
+[TCP] SEQ_OK
+[DUT] Header  ipv4=8  tcp=8  udp=0  roce=0  other=0  trunc=0
+[DUT] TCP     hs=1  fin=0  rst=0  seq_ok=5  seq_err=0  op_err=0
+```
+
+A miss still opens the file; `pcap_next()` returns nothing for HDL:
+
+```bash
+make FILTER='udp'
+```
+
+```
+[C-DPI] BPF filter: udp
+[SV] Reached end of PCAP before hitting the packet cap.
+[SV] Simulation finished. File=traffic.pcap  Streamed 0 packets.
+[DUT] Header  ipv4=0  tcp=0  udp=0  roce=0  other=0  trunc=0
+```
+
+Soft-RoCE is UDP/4791, so the same knob keeps the RoCE DUT and drops TCP:
+
+```bash
+make PCAP=soft_roce.pcap FILTER='udp port 4791'
+```
+
+```
+[C-DPI] BPF filter: udp port 4791
+[HDR] ... 192.168.10.1:49441 -> 192.168.10.2:4791  ROCE SEND_LAST ... AckReq
+[TRK] MSG_DONE
+[DUT] ICRC  8a401571 OK
+[HDR] ... ROCE ACK ...
+[TRK] ACK_OK
+[DUT] ICRC  dabe7a49 OK
+[DUT] Header  ipv4=8  tcp=0  udp=0  roce=8  other=0  trunc=0
+[DUT] Tracker msg=1  ack=1  psn_err=0  op_err=0  psn_gap=0
+[DUT] ICRC    ok=8  err=0  skip=0
+```
+
+A 1000-packet veth capture can stay one file: `make PCAP=iperf_capture.pcap FILTER='tcp port 5201' MAX_PACKETS=8`.
+
 ## Example: Soft-RoCE (`soft_roce.pcap`)
 
 ```bash
 make PCAP=soft_roce.pcap
 make PCAP=soft_roce.pcap MAX_PACKETS=16
+make PCAP=soft_roce.pcap FILTER='udp port 4791'
 ```
 
 UDP/4791 frames are tagged `ROCE` with BTH opcode, dest QP, and PSN. The tracker emits `OK` on in-order fragments, `MSG_DONE` on Send Last, and `ACK_OK` on the matching reverse ACK. An 8-packet cap finishes mid-message in the reverse direction (`msg=1 ack=1`). `MAX_PACKETS=16` completes three messages (`msg=3 ack=3`, three runt ACKs) and starts the next Send. Logs: `examples/traffic_8pkt.log`, `examples/soft_roce_8pkt.log`, `examples/soft_roce_16pkt.log`.
@@ -151,7 +211,7 @@ Capture a new file with `sudo ./scripts/soft_roce_veth.sh setup` then `demo` (`d
 - RoCEv2 BTH: opcode, dest QP, PSN, P_Key, AckReq
 - RoCEv2 ICRC: last 4 bytes checked; truncated captures skipped
 - Tracker: RoCE PSN/ACK and next-message PSN_GAP; TCP SYN / SYN-ACK / HS_DONE / next-seq (`plen`) / FIN / RST
-- Replay: optional `+PACE=1` IFG from pcap timestamps (capped); `AXIS_W=64` eight-byte beats; `tready` handshake (`+BP=1`); `DUMP=` writes the bus back to a pcap
+- Replay: optional `+PACE=1` IFG from pcap timestamps (capped); `AXIS_W=64` eight-byte beats; `tready` handshake (`+BP=1`); `DUMP=` writes the bus back to a pcap; `FILTER=` is libpcap BPF before the stream
 
 Still parked: IPv6, VLAN. See [CHANGELOG.md](CHANGELOG.md).
 

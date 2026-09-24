@@ -10,6 +10,8 @@ Reference logs after M1–M4 (`ttl` / `iplen`, TCP handshake, RoCE PSN + AckReq)
 | [soft_roce_16pkt.log](soft_roce_16pkt.log) | `make PCAP=soft_roce.pcap MAX_PACKETS=16` | `msg=3 ack=3 psn_gap=0` |
 | [soft_roce_gtkwave.jpg](soft_roce_gtkwave.jpg) | `make wave` | `hdr_is_roce`, `dst_port=0x12b7` |
 | (same gates) | `make BP=1` | `tready` 50%; counts unchanged |
+| (same gates) | `make FILTER='tcp port 5201'` | BPF in DPI-C; HDL still `hs=1 seq_ok=5` |
+| (0 packets) | `make FILTER='udp'` | TCP capture; end of pcap before cap |
 
 TCP handshake: SYN → SYN-ACK → ACK (`HS_DONE`), then PSH/ACK with next-expected `seq` (`SEQ_OK`). `iplen=60` on the 74-byte SYN (14+60).
 
@@ -19,8 +21,9 @@ RoCE: Send First/Middle/Last + AckReq on Last, reverse ACK (`iplen=48`, runt). S
 make
 make DUMP=replay.pcap
 make PCAP=replay.pcap
-make PCAP=soft_roce.pcap
-make PCAP=soft_roce.pcap MAX_PACKETS=16
+make FILTER='tcp port 5201'
+make FILTER='udp'
+make PCAP=soft_roce.pcap FILTER='udp port 4791'
 ```
 
 Main write-up: [Readme.md](../Readme.md).

@@ -21,6 +21,7 @@ PACE ?= 0
 PACE_MAX_US ?= 100
 BP ?= 0
 DUMP ?=
+FILTER ?=
 # 8 = one byte/cycle (default logs). 64 = tdata[63:0] + tkeep.
 AXIS_W ?= 8
 
@@ -52,7 +53,7 @@ run: compile
 	@if [ ! -f ./obj_dir/V$(TOP_MODULE) ]; then \
 		echo "[ERROR] Compiled executable not found!"; exit 1; \
 	fi
-	./obj_dir/V$(TOP_MODULE) +MAX_PACKETS=$(MAX_PACKETS) +PCAP="$(PCAP)" +PACE=$(PACE) +PACE_MAX_US=$(PACE_MAX_US) +BP=$(BP) $(if $(DUMP),+DUMP="$(DUMP)",) | tee $(LOG_FILE)
+	./obj_dir/V$(TOP_MODULE) +MAX_PACKETS=$(MAX_PACKETS) +PCAP="$(PCAP)" +PACE=$(PACE) +PACE_MAX_US=$(PACE_MAX_US) +BP=$(BP) $(if $(DUMP),+DUMP="$(DUMP)",) $(if $(FILTER),+FILTER="$(FILTER)",) | tee $(LOG_FILE)
 
 # Open generated trace file in GTKWave waveform viewer
 .PHONY: wave
@@ -83,5 +84,6 @@ help:
 	@echo "  make run BP=1                   - AXI-Stream tready 50% backpressure"
 	@echo "  make run AXIS_W=64              - 8-byte AXI-Stream beats (rebuilds)"
 	@echo "  make run DUMP=replay.pcap       - write AXI-Stream frames back to pcap"
+	@echo "  make run FILTER='tcp port 5201' - libpcap BPF before the HDL stream"
 	@echo "  make wave     - Open simulation trace in GTKWave background"
 	@echo "  make clean    - Remove build artifacts, waveforms, and logs"

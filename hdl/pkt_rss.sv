@@ -1,5 +1,5 @@
 // NIC RSS: Microsoft Toeplitz hash of IPv4 4-tuple (TCP/UDP) or 2-tuple (other).
-// Same 40-byte key and bit order as pcap_reader.c. Queue = hash % NUM_Q.
+// Same 40-byte key and bit order as dpi/pcap_reader.c. Queue = hash % NUM_Q.
 
 `timescale 1ns/1ps
 

@@ -8,8 +8,17 @@ TOP_MODULE = tb_pcap_dpi
 WAVE_VIEWER = gtkwave
 
 # Source files
-SV_SOURCES = tb_pcap_dpi.sv pkt_size_filter.sv pkt_header_parser.sv pkt_roce_tracker.sv pkt_tcp_tracker.sv pkt_roce_icrc.sv pkt_rss.sv
-C_SOURCES  = pcap_reader.c
+HDL_DIR = hdl
+DPI_DIR = dpi
+SV_SOURCES = \
+	$(HDL_DIR)/tb_pcap_dpi.sv \
+	$(HDL_DIR)/pkt_size_filter.sv \
+	$(HDL_DIR)/pkt_header_parser.sv \
+	$(HDL_DIR)/pkt_roce_tracker.sv \
+	$(HDL_DIR)/pkt_tcp_tracker.sv \
+	$(HDL_DIR)/pkt_roce_icrc.sv \
+	$(HDL_DIR)/pkt_rss.sv
+C_SOURCES  = $(DPI_DIR)/pcap_reader.c
 WAVE_FILE  = simulation_trace.vcd
 LOG_FILE   = simulation.log
 
@@ -42,9 +51,18 @@ compile: $(SV_SOURCES) $(C_SOURCES)
 		echo "[MAKE] AXIS_W changed ($(AXIS_W)); rebuilding..."; \
 		rm -rf obj_dir; \
 	fi
+	@if [ -d obj_dir ] && [ ! -f obj_dir/.src_w ]; then \
+		echo "[MAKE] Stale obj_dir; rebuilding..."; \
+		rm -rf obj_dir; \
+	fi
+	@if [ -f obj_dir/.src_w ] && [ "$$(cat obj_dir/.src_w)" != "$(C_SOURCES) $(SV_SOURCES)" ]; then \
+		echo "[MAKE] HDL/DPI sources moved; rebuilding..."; \
+		rm -rf obj_dir; \
+	fi
 	@echo "[MAKE] Verilating and compiling hardware-software layers..."
 	$(VERILATOR) $(VERILATOR_FLAGS) $(SV_SOURCES) $(C_SOURCES) $(LDFLAGS)
 	@echo $(AXIS_W) > obj_dir/.axis_w
+	@echo "$(C_SOURCES) $(SV_SOURCES)" > obj_dir/.src_w
 
 # Run the compiled simulation binary and log output
 .PHONY: run

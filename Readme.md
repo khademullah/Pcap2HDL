@@ -28,17 +28,19 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 | Path | Role |
 |------|------|
 | `Makefile` | Compile, run, waveforms, clean |
-| `tb_pcap_dpi.sv` | Testbench: DPI imports, stream driver, plusargs |
-| `pkt_size_filter.sv` | Frame length: runt (&lt;64), standard, jumbo (&gt;1500) |
-| `pkt_header_parser.sv` | L2–L4 parse; TCP flags/seq; Soft-RoCE BTH (opcode, QP, PSN, P_Key, AckReq) |
-| `pkt_roce_tracker.sv` | RoCE session CAM: PSN sequence, MSG_DONE, ACK_OK |
-| `pkt_roce_icrc.sv` | RoCEv2 ICRC: extract last 4 bytes, check; skip truncated |
-| `pkt_rss.sv` | NIC RSS Toeplitz hash → queue; compared with DPI-C |
-| `pcap_reader.c` | Offline `libpcap` reader, BPF filter, AXI-Stream dump writer |
+| `hdl/` | SystemVerilog testbench and DUT |
+| `hdl/tb_pcap_dpi.sv` | DPI imports, AXI-Stream driver, plusargs |
+| `hdl/pkt_size_filter.sv` | Frame length: runt / standard / jumbo |
+| `hdl/pkt_header_parser.sv` | L2–L4 parse; TCP; Soft-RoCE BTH |
+| `hdl/pkt_roce_tracker.sv` | RoCE PSN / MSG_DONE / ACK_OK |
+| `hdl/pkt_tcp_tracker.sv` | TCP handshake and next-seq |
+| `hdl/pkt_roce_icrc.sv` | RoCEv2 ICRC |
+| `hdl/pkt_rss.sv` | NIC RSS Toeplitz; compared with DPI-C |
+| `dpi/pcap_reader.c` | libpcap DPI-C: read, BPF, dump, RSS hash |
 | `traffic.pcap` | Local iperf TCP trace (not in git) |
 | `soft_roce.pcap` | Local Soft-RoCEv2 trace from `scripts/soft_roce_veth.sh` |
-| `docs/` | Capture notes, TCP GTKWave still, dump in Wireshark |
-| `examples/` | Soft-RoCE simulation logs and GTKWave still |
+| `docs/` | Capture notes, GTKWave and Wireshark stills |
+| `examples/` | Reference simulation logs |
 | `scripts/soft_roce_veth.sh` | veth + RXE + `ibv_rc_pingpong` capture helper |
 
 ## Data path

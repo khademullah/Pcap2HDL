@@ -3,6 +3,7 @@
 ## Unreleased (0.3)
 
 - NIC RSS: Microsoft Toeplitz 4-tuple (IPv4 TCP/UDP) in DPI-C and HDL. `tuser` carries the C hash on the bus; `pkt_rss` recomputes after parse. Gate `mis=0`. Four queues (`hash % 4`).
+- Layout: SystemVerilog under `hdl/`, DPI-C under `dpi/`.
 
 ## 0.2.0
 

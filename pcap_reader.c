@@ -18,6 +18,8 @@ static u_char dump_buf[DUMP_MAX];
 static int dump_len = 0;
 static int dump_count = 0;
 
+static void compute_rss(void);
+
 int open_pcap(const char* filename) {
     char errbuf[PCAP_ERRBUF_SIZE];
     handle = pcap_open_offline(filename, errbuf);
@@ -40,6 +42,7 @@ int fetch_next_packet() {
     }
     current_byte_idx = 0;
     /* caplen is stored bytes; header.len is original on-wire length. */
+    compute_rss();
     return (int)header.caplen;
 }
 
@@ -78,6 +81,99 @@ int get_ts_usec(void) {
 
 int get_datalink(void) {
     return handle ? pcap_datalink(handle) : -1;
+}
+
+/* Intel/Microsoft RSS Toeplitz. Same key and bit order as pkt_rss.sv. */
+static const unsigned char rss_key[40] = {
+    0x6d, 0x5a, 0x56, 0xda, 0x25, 0x5b, 0x0e, 0xc2,
+    0x41, 0x67, 0x25, 0x3d, 0x43, 0xa3, 0x8f, 0xb0,
+    0xd0, 0xca, 0x2b, 0xcb, 0xae, 0x7b, 0x30, 0xb4,
+    0x77, 0xcb, 0x2d, 0xa3, 0x80, 0x30, 0xf2, 0x0c,
+    0x6a, 0x42, 0xb7, 0x3b, 0xbe, 0xac, 0x01, 0xfa
+};
+
+static int rss_valid;
+static unsigned int rss_hash_val;
+
+static unsigned int rss_key_window(int bit_off)
+{
+    unsigned int v = 0;
+    int i, b, by, bi;
+
+    for (i = 0; i < 32; i++) {
+        b = bit_off + i;
+        by = b / 8;
+        bi = 7 - (b % 8);
+        v <<= 1;
+        if (rss_key[by] & (1u << bi))
+            v |= 1u;
+    }
+    return v;
+}
+
+static unsigned int rss_toeplitz(const unsigned char *in, int nbytes)
+{
+    unsigned int hash = 0;
+    int off = 0, i, bit;
+
+    for (i = 0; i < nbytes; i++) {
+        for (bit = 7; bit >= 0; bit--) {
+            if (in[i] & (1u << bit))
+                hash ^= rss_key_window(off);
+            off++;
+        }
+    }
+    return hash;
+}
+
+static void compute_rss(void)
+{
+    unsigned char in[12];
+    int ihl, l4, cap;
+    unsigned et;
+
+    rss_valid = 0;
+    rss_hash_val = 0;
+    if (!packet_data)
+        return;
+    cap = (int)header.caplen;
+    if (cap < 34)
+        return;
+    et = ((unsigned)packet_data[12] << 8) | packet_data[13];
+    if (et != 0x0800)
+        return;
+    ihl = packet_data[14] & 0x0f;
+    if (ihl < 5)
+        return;
+    l4 = 14 + ihl * 4;
+    in[0] = packet_data[26];
+    in[1] = packet_data[27];
+    in[2] = packet_data[28];
+    in[3] = packet_data[29];
+    in[4] = packet_data[30];
+    in[5] = packet_data[31];
+    in[6] = packet_data[32];
+    in[7] = packet_data[33];
+    if ((packet_data[23] == 6 || packet_data[23] == 17) && cap >= l4 + 4) {
+        in[8]  = packet_data[l4];
+        in[9]  = packet_data[l4 + 1];
+        in[10] = packet_data[l4 + 2];
+        in[11] = packet_data[l4 + 3];
+        rss_hash_val = rss_toeplitz(in, 12);
+    } else {
+        rss_hash_val = rss_toeplitz(in, 8);
+    }
+    rss_valid = 1;
+}
+
+int get_rss_valid(void)
+{
+    return rss_valid;
+}
+
+unsigned int get_rss_hash(void)
+{
+    return rss_hash_val;
 }
 
 unsigned char get_packet_byte() {

@@ -4,7 +4,7 @@ Reference logs after M1–M4 (`ttl` / `iplen`, TCP handshake, RoCE PSN + AckReq)
 
 | File | Command | Gate |
 |------|---------|------|
-| [traffic_8pkt.log](traffic_8pkt.log) | `make` | `tcp=8 hs=1 seq_ok=5 seq_err=0 mismatch=0` |
+| [traffic_8pkt.log](traffic_8pkt.log) | `make` | `tcp=8 hs=1 seq_ok=5 seq_err=0 mismatch=0` `RSS mis=0` |
 | [../docs/wireshark_replay.png](../docs/wireshark_replay.png) | `make DUMP=replay.pcap` | Wireshark: 8 Ethernet frames; replay matches DUT |
 | [soft_roce_8pkt.log](soft_roce_8pkt.log) | `make PCAP=soft_roce.pcap` | `roce=8 msg=1 ack=1 psn_gap=0 icrc ok=8` |
 | [soft_roce_16pkt.log](soft_roce_16pkt.log) | `make PCAP=soft_roce.pcap MAX_PACKETS=16` | `msg=3 ack=3 psn_gap=0` |

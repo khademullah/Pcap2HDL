@@ -1,5 +1,9 @@
 # Release notes
 
+## Unreleased (0.3)
+
+- NIC RSS: Microsoft Toeplitz 4-tuple (IPv4 TCP/UDP) in DPI-C and HDL. `tuser` carries the C hash on the bus; `pkt_rss` recomputes after parse. Gate `mis=0`. Four queues (`hash % 4`).
+
 ## 0.2.0
 
 Stack-meets-HDL: libpcap decides the slice and can write the bus back; the DUT is a real AXI-Stream slave with TCP next-seq.

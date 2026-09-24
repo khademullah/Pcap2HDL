@@ -20,6 +20,8 @@ module tb_pcap_dpi #(
     import "DPI-C" function int dump_packet(input longint ts_sec, input int ts_usec, input int wire_len);
     import "DPI-C" function int dump_pkt_count();
     import "DPI-C" function void close_pcap_dump();
+    import "DPI-C" function int get_rss_valid();
+    import "DPI-C" function int unsigned get_rss_hash();
 
     reg clk;
     reg rst_n;
@@ -29,6 +31,7 @@ module tb_pcap_dpi #(
     reg                tready;
     reg                tstart;
     reg                tlast;
+    reg [31:0]         tuser;
 
     wire        pkt_done;
     wire [31:0] pkt_bytes;
@@ -83,6 +86,11 @@ module tb_pcap_dpi #(
     wire tcp_op_err;
     wire tcp_sess_full;
 
+    wire        rss_valid;
+    wire        rss_skip;
+    wire [31:0] rss_hash;
+    wire [1:0]  rss_qid;
+
     wire        icrc_valid;
     wire [31:0] icrc;
     wire        icrc_ok;
@@ -105,6 +113,9 @@ module tb_pcap_dpi #(
     int n_hs, n_tcp_seq_ok, n_tcp_seq_err, n_tcp_op_err;
     int n_len_mis, n_fin, n_rst, n_psn_gap;
     int n_icrc_ok, n_icrc_err, n_icrc_skip;
+    int n_rss_q0, n_rss_q1, n_rss_q2, n_rss_q3, n_rss_mis, n_rss_skip;
+    int unsigned c_rss_hash;
+    bit          c_rss_ok;
     bit pace;
     bit bp;
     int pace_max_us;
@@ -281,6 +292,25 @@ module tb_pcap_dpi #(
         .icrc_skip(icrc_skip)
     );
 
+    pkt_rss #(
+        .NUM_Q(4)
+    ) u_rss (
+        .clk(clk),
+        .rst_n(rst_n),
+        .hdr_valid(hdr_valid),
+        .is_ipv4(hdr_is_ipv4),
+        .is_truncated(hdr_is_truncated),
+        .ip_proto(ip_proto),
+        .src_ip(src_ip),
+        .dst_ip(dst_ip),
+        .src_port(src_port),
+        .dst_port(dst_port),
+        .rss_valid(rss_valid),
+        .rss_skip(rss_skip),
+        .rss_hash(rss_hash),
+        .rss_qid(rss_qid)
+    );
+
     always #5 clk = ~clk;
 
     always @(posedge clk or negedge rst_n) begin
@@ -328,6 +358,25 @@ module tb_pcap_dpi #(
                 $display("[DUT] ICRC  %08h OK", icrc);
             else
                 $display("[DUT] ICRC  %08h BAD", icrc);
+        end
+    end
+
+    always @(posedge clk) begin
+        if (rst_n && rss_skip)
+            n_rss_skip = n_rss_skip + 1;
+        if (rst_n && rss_valid) begin
+            unique case (rss_qid)
+                2'd0: n_rss_q0 = n_rss_q0 + 1;
+                2'd1: n_rss_q1 = n_rss_q1 + 1;
+                2'd2: n_rss_q2 = n_rss_q2 + 1;
+                default: n_rss_q3 = n_rss_q3 + 1;
+            endcase
+            if (!c_rss_ok || (rss_hash != c_rss_hash)) begin
+                n_rss_mis = n_rss_mis + 1;
+                $display("[RSS] q=%0d hash=%08h DPI=%08h MISMATCH",
+                         rss_qid, rss_hash, c_rss_hash);
+            end else
+                $display("[RSS] q=%0d hash=%08h", rss_qid, rss_hash);
         end
     end
 
@@ -437,6 +486,7 @@ module tb_pcap_dpi #(
         tvalid = 0;
         tstart = 0;
         tlast = 0;
+        tuser = '0;
         packet_count = 0;
         n_runt = 0;
         n_standard = 0;
@@ -462,6 +512,14 @@ module tb_pcap_dpi #(
         n_icrc_ok = 0;
         n_icrc_err = 0;
         n_icrc_skip = 0;
+        n_rss_q0 = 0;
+        n_rss_q1 = 0;
+        n_rss_q2 = 0;
+        n_rss_q3 = 0;
+        n_rss_mis = 0;
+        n_rss_skip = 0;
+        c_rss_hash = 0;
+        c_rss_ok = 0;
         max_packets = 8;
         pace_arg = 0;
         pace = 1'b0;
@@ -537,6 +595,8 @@ module tb_pcap_dpi #(
             ts_sec   = get_ts_sec();
             ts_usec  = get_ts_usec();
             packet_count = packet_count + 1;
+            c_rss_ok   = (get_rss_valid() != 0);
+            c_rss_hash = get_rss_hash();
             $display("[SV] Processing Packet #%0d (captured %0d / wire %0d bytes) ts=%0d.%06d",
                      packet_count, pkt_len, pkt_wire, ts_sec, ts_usec);
             if (pkt_len < pkt_wire)
@@ -574,6 +634,7 @@ module tb_pcap_dpi #(
                 tvalid = 1;
                 tstart = (i == 0);
                 tlast  = ((i + KEEP_W) >= pkt_len);
+                tuser  = c_rss_ok ? c_rss_hash : 32'd0;
                 do @(posedge clk); while (!tready);
                 if (dumping) begin
                     for (k = 0; k < KEEP_W; k = k + 1)
@@ -588,6 +649,7 @@ module tb_pcap_dpi #(
             tvalid = 0;
             tstart = 0;
             tlast  = 0;
+            tuser  = '0;
             tdata  = '0;
             tkeep  = '0;
             repeat (3) @(posedge clk);
@@ -610,6 +672,8 @@ module tb_pcap_dpi #(
         $display("[DUT] Length  mismatch=%0d", n_len_mis);
         $display("[DUT] ICRC    ok=%0d  err=%0d  skip=%0d",
                  n_icrc_ok, n_icrc_err, n_icrc_skip);
+        $display("[DUT] RSS     q0=%0d  q1=%0d  q2=%0d  q3=%0d  mis=%0d  skip=%0d",
+                 n_rss_q0, n_rss_q1, n_rss_q2, n_rss_q3, n_rss_mis, n_rss_skip);
         $finish;
         end
     end

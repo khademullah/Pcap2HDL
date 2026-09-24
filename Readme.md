@@ -33,7 +33,7 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 | `pkt_header_parser.sv` | L2–L4 parse; TCP flags/seq; Soft-RoCE BTH (opcode, QP, PSN, P_Key, AckReq) |
 | `pkt_roce_tracker.sv` | RoCE session CAM: PSN sequence, MSG_DONE, ACK_OK |
 | `pkt_roce_icrc.sv` | RoCEv2 ICRC: extract last 4 bytes, check; skip truncated |
-| `pkt_tcp_tracker.sv` | TCP 4-tuple CAM: SYN / SYN-ACK / HS_DONE, next-seq |
+| `pkt_rss.sv` | NIC RSS Toeplitz hash → queue; compared with DPI-C |
 | `pcap_reader.c` | Offline `libpcap` reader, BPF filter, AXI-Stream dump writer |
 | `traffic.pcap` | Local iperf TCP trace (not in git) |
 | `soft_roce.pcap` | Local Soft-RoCEv2 trace from `scripts/soft_roce_veth.sh` |
@@ -48,8 +48,9 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
                                                               ->  pkt_size_filter
                                                               ->  pkt_header_parser
                                                               ->  pkt_roce_tracker
-                                                              ->  pkt_tcp_tracker
-                                                              ->  pkt_roce_icrc
+                                                         ->  pkt_tcp_tracker
+                                                         ->  pkt_roce_icrc
+                                                         ->  pkt_rss
                                          optional dump.pcap <- libpcap
 ```
 
@@ -61,6 +62,7 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 6. `pkt_roce_tracker` follows Send First/Middle/Last PSN per `{src,dst,qp}` and matches the reverse-direction ACK.
 7. `pkt_tcp_tracker` follows SYN / SYN-ACK / ACK (`HS_DONE`) and then next expected seq from TCP payload length.
 8. `pkt_roce_icrc` checks the last 4 bytes of a complete RoCEv2 frame (masked CRC32). Truncated captures are skipped.
+9. `pkt_rss` computes Microsoft Toeplitz RSS on the IPv4 4-tuple (queue = hash % 4). DPI-C hashes the same bytes into `tuser`; `mis` must stay 0.
 
 ## Build and run
 
@@ -107,6 +109,7 @@ One `[HDR]` line is printed when headers are valid (after L4 ports for TCP/UDP).
 [DUT] TCP     hs=1  fin=0  rst=0  seq_ok=5  seq_err=0  op_err=0
 [DUT] Length  mismatch=0
 [DUT] ICRC    ok=0  err=0  skip=0
+[DUT] RSS     q0=5  q1=0  q2=3  q3=0  mis=0  skip=0
 ```
 
 Waveform: `docs/gtkwave_8pkt.jpg`. Each `tvalid` burst is one frame (`tstart` / `tlast`). At millisecond zoom the 10 ns clock looks solid; zoom into a burst to see edges.
@@ -211,6 +214,7 @@ Capture a new file with `sudo ./scripts/soft_roce_veth.sh setup` then `demo` (`d
 - RoCEv2 BTH: opcode, dest QP, PSN, P_Key, AckReq
 - RoCEv2 ICRC: last 4 bytes checked; truncated captures skipped
 - Tracker: RoCE PSN/ACK and next-message PSN_GAP; TCP SYN / SYN-ACK / HS_DONE / next-seq (`plen`) / FIN / RST
+- RSS: Toeplitz 4-tuple in C and HDL (`tuser`); four queues, `mis=0`
 - Replay: optional `+PACE=1` IFG from pcap timestamps (capped); `AXIS_W=64` eight-byte beats; `tready` handshake (`+BP=1`); `DUMP=` writes the bus back to a pcap; `FILTER=` is libpcap BPF before the stream
 
 Still parked: IPv6, VLAN. See [CHANGELOG.md](CHANGELOG.md).

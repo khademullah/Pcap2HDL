@@ -315,7 +315,14 @@ pre {
   overflow: hidden;
   background: #fff;
 }
-.media img { display: block; width: 100%; height: auto; }
+.media img,
+.media video { display: block; width: 100%; height: auto; }
+.demo-reel {
+  max-width: 960px;
+  margin-inline: auto;
+  background: #0c2340;
+}
+.demo-reel video { background: #08182c; aspect-ratio: 16 / 9; }
 .cap {
   padding: 0.7rem 0.95rem;
   color: var(--muted);

@@ -10,7 +10,7 @@ Pcap2HDL streams `.pcap` files into Verilator through DPI-C (`libpcap`). Each ca
 
 Typical uses: early bring-up of FPGA or ASIC packet pipelines (classification, DPI, RoCE-aware paths) before silicon or a live Ethernet port is available.
 
-Current release: [0.3.0](CHANGELOG.md). Project site: [khademullah.github.io/Pcap2HDL](https://khademullah.github.io/Pcap2HDL/).
+Current release: [0.3.0](CHANGELOG.md). Project site: [khademullah.github.io/Pcap2HDL](https://khademullah.github.io/Pcap2HDL/). Demo (16:9): [pcap2hdl-demo.mp4](https://khademullah.github.io/Pcap2HDL/pcap2hdl-demo.mp4). LinkedIn reel (9:16): [pcap2hdl-demo-9x16.mp4](https://khademullah.github.io/Pcap2HDL/pcap2hdl-demo-9x16.mp4).
 
 ## Requirements
 

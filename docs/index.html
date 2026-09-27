@@ -19,13 +19,13 @@
         Pcap2HDL
       </a>
       <nav>
-        <a class="hide-sm" href="#demo">Demo</a>
         <a class="hide-sm" href="#overview">Overview</a>
         <a class="hide-sm" href="#pipeline">Pipeline</a>
         <a class="hide-sm" href="#dut">DUT</a>
         <a class="hide-sm" href="#run">Run</a>
         <a href="#build">Build</a>
         <a class="hide-sm" href="#contribute">Contribute</a>
+        <a href="#demo">Demo</a>
         <a class="btn btn-solid" href="https://github.com/khademullah/Pcap2HDL">GitHub</a>
       </nav>
     </div>
@@ -67,26 +67,6 @@
       <div class="stat"><b>RoCEv2</b><span>BTH, PSN tracker, ICRC on complete frames</span></div>
       <div class="stat"><b>BPF</b><span>matched / skipped, unread tail not counted</span></div>
     </div>
-    </div>
-  </section>
-
-  <section class="block" id="demo">
-    <div class="wrap">
-      <h2>Demo</h2>
-      <p class="sub">
-        Two-minute walkthrough of the site and live <code>make</code> logs
-        (<code>traffic.pcap</code>, <code>ci.pcap</code>, Soft-RoCEv2, BPF).
-        File: <a href="pcap2hdl-demo.mp4">pcap2hdl-demo.mp4</a>
-        (16:9 for this page). LinkedIn cut:
-        <a href="pcap2hdl-demo-9x16.mp4">9:16</a>.
-      </p>
-      <figure class="media demo-reel">
-        <video controls preload="metadata" poster="pcap2hdl-demo.jpg" width="1920" height="1080">
-          <source src="pcap2hdl-demo.mp4" type="video/mp4">
-          <a href="pcap2hdl-demo.mp4">Download the demo video</a>
-        </video>
-        <figcaption class="cap">1920×1080, about 1:54.  picture is laid out for the site.</figcaption>
-      </figure>
     </div>
   </section>
 
@@ -276,11 +256,58 @@ make AXIS_W=64 PCAP=soft_roce.pcap</pre>
     </div>
   </section>
 
+  <section class="block" id="demo" hidden>
+    <div class="wrap">
+      <h2>Demo</h2>
+      <p class="sub">
+        Two-minute walkthrough of the site and live <code>make</code> logs
+        (<code>traffic.pcap</code>, <code>ci.pcap</code>, Soft-RoCEv2, BPF).
+        File: <a href="pcap2hdl-demo.mp4">pcap2hdl-demo.mp4</a>
+        (16:9 for this page). LinkedIn cut:
+        <a href="pcap2hdl-demo-9x16.mp4">9:16</a>.
+      </p>
+      <figure class="media demo-reel">
+        <video id="demo-video" controls preload="none" poster="pcap2hdl-demo.jpg" width="1920" height="1080">
+          <source data-src="pcap2hdl-demo.mp4" type="video/mp4">
+          <a href="pcap2hdl-demo.mp4">Download the demo video</a>
+        </video>
+        <figcaption class="cap">1920×1080, about 1:54, 16:9.</figcaption>
+      </figure>
+    </div>
+  </section>
+
   <footer class="foot">
     <div class="wrap foot-inner">
       <span>Pcap2HDL · MIT · GitHub Pages from <code>docs/</code></span>
       <span>No capture files are published on this site.</span>
     </div>
   </footer>
+  <script>
+    (function () {
+      var section = document.getElementById("demo");
+      var video = document.getElementById("demo-video");
+      var source = video && video.querySelector("source");
+
+      function showDemo() {
+        if (!section) return;
+        section.hidden = false;
+        if (source && !source.getAttribute("src") && source.dataset.src) {
+          source.setAttribute("src", source.dataset.src);
+          video.load();
+        }
+      }
+
+      document.querySelectorAll('a[href="#demo"]').forEach(function (link) {
+        link.addEventListener("click", function (event) {
+          event.preventDefault();
+          showDemo();
+          if (history.replaceState) history.replaceState(null, "", "#demo");
+          section.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      });
+
+      if (location.hash === "#demo") showDemo();
+    })();
+  </script>
 </body>
 </html>

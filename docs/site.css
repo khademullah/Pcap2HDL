@@ -323,6 +323,7 @@ pre {
   background: #0c2340;
 }
 .demo-reel video { background: #08182c; aspect-ratio: 16 / 9; }
+#demo[hidden] { display: none !important; }
 .cap {
   padding: 0.7rem 0.95rem;
   color: var(--muted);

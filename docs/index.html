@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Pcap2HDL — packet traces to HDL simulation</title>
-  <meta name="description" content="Replay Ethernet pcaps into Verilator through DPI-C. AXI-Stream DUT for IPv4 TCP, Soft-RoCEv2, RSS, and checksum bring-up.">
+  <meta name="description" content="Replay Ethernet pcaps into Verilator through DPI-C. 0.4.0: Bring your own NIC, C vs HDL checksum, ARP/VXLAN.">
   <link rel="icon" href="pcap2hdl-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -38,7 +38,7 @@
     <div class="hero-grid">
       <div>
         <img class="hero-mark" src="pcap2hdl-logo-hero.png" alt="Pcap2HDL — Packet traces to HDL simulation">
-        <p class="kicker">Open-source verification</p>
+        <p class="kicker">Release 0.4.0</p>
         <h1>Packet traces to cycle-accurate HDL</h1>
         <p class="lede">
           Stream a captured <code>.pcap</code>
@@ -51,7 +51,7 @@
           <a class="btn btn-ghost" href="nic.html">Bring your own NIC</a>
           <a class="btn btn-ghost" href="#demo">Watch demo</a>
         </div>
-        <p class="meta">Tagged release 0.3.0 · Unreleased 0.4 (checksum, ARP/VXLAN, CI) · MIT · Linux / Verilator 5.032+</p>
+        <p class="meta">0.4.0 · Bring your own NIC · MIT · Linux / Verilator 5.032+</p>
       </div>
       <aside class="hero-panel">
         <h2>Data path</h2>
@@ -59,13 +59,13 @@
           <li><span class="n">01</span> libpcap open, optional BPF filter</li>
           <li><span class="n">02</span> DPI-C bytes, timestamps, DLT</li>
           <li><span class="n">03</span> AXI-Stream <code>tvalid && tready</code></li>
-          <li><span class="n">04</span> Size, parse, TCP / RoCE, RSS, ICRC, csum</li>
+          <li><span class="n">04</span> Observers snoop; optional <code>nic_rx</code> drives ready</li>
           <li><span class="n">05</span> Optional dump back to pcap</li>
         </ol>
       </aside>
     </div>
     <div class="stats">
-      <div class="stat"><b>AXI-Stream</b><span>tvalid / tready slave, AXIS_W 8 or 64</span></div>
+      <div class="stat"><b>Bring your own NIC</b><span>make NIC=1 · nic_rx slave beside observers</span></div>
       <div class="stat"><b>C vs HDL</b><span>RSS Toeplitz and IPv4 checksum, mis=0</span></div>
       <div class="stat"><b>RoCEv2</b><span>BTH, PSN tracker, ICRC on complete frames</span></div>
       <div class="stat"><b>BPF</b><span>matched / skipped, unread tail not counted</span></div>
@@ -86,8 +86,8 @@
           <p>Offline replay with wire length, timestamps, and DLT. <code>FILTER=</code> compiles BPF and reports match versus skip counts.</p>
         </article>
         <article class="card">
-          <h3>AXI-Stream slave</h3>
-          <p><code>nic_rx</code> drives <code>s_tready</code>. Observers snoop the same beats. Default 8 bits per cycle; <code>AXIS_W=64</code> packs eight bytes. Extra stalls: <code>BP=1</code> / <code>BP=2</code>.</p>
+          <h3>Bring your own NIC</h3>
+          <p>Optional AXIS slave: <code>make NIC=1</code> compiles <code>nic_rx</code>. It drives <code>s_tready</code>. Parser, TCP/RoCE, RSS, and checksum snoop the same beats — they are not a FIFO after the NIC.</p>
         </article>
         <article class="card">
           <h3>C vs HDL scoreboard</h3>
@@ -130,7 +130,7 @@
         <div>BPF<small>optional FILTER</small></div>
         <div>DPI-C<small>pcap_reader.c</small></div>
         <div>AXI-Stream<small>tb_pcap_dpi</small></div>
-        <div>DUT<small>parse · track · RSS</small></div>
+        <div>observers · nic_rx<small>beside, not after</small></div>
       </div>
     </div>
   </section>
@@ -245,7 +245,6 @@ make AXIS_W=64 PCAP=soft_roce.pcap</pre>
             <li>IPv6 in <code>pkt_header_parser.sv</code>, keep IPv4/RoCE gates green</li>
             <li>802.1Q VLAN: EtherType 0x8100, then inner type; untagged captures must not break</li>
             <li>More example logs (failed handshake, malformed frames); do not commit <code>.pcap</code> files</li>
-            <li>Bring your own NIC: <a href="nic.html">nic.html</a> (<code>make NIC=1</code>)</li>
           </ul>
         </article>
         <article class="card">
@@ -255,7 +254,7 @@ make AXIS_W=64 PCAP=soft_roce.pcap</pre>
             <li>Replacing the DPI-C bench with a UVM environment</li>
             <li>A GUI around the simulator</li>
           </ul>
-          <p class="note">Stretch items already landed: IPv4 checksum scoreboard, ARP/VXLAN, random <code>BP=2</code>, <code>scripts/gen_pcap.py</code>, GitHub Actions.</p>
+          <p class="note">0.4.0 landed: Bring your own NIC (<code>make NIC=1</code>), IPv4 checksum scoreboard, ARP/VXLAN, random <code>BP=2</code>, <code>scripts/gen_pcap.py</code>, GitHub Actions.</p>
         </article>
       </div>
       <div class="cta gap">
@@ -290,7 +289,7 @@ make AXIS_W=64 PCAP=soft_roce.pcap</pre>
 
   <footer class="foot">
     <div class="wrap foot-inner">
-      <span>Pcap2HDL · MIT · GitHub Pages from <code>docs/</code></span>
+      <span>Pcap2HDL 0.4.0 · MIT · GitHub Pages from <code>docs/</code></span>
       <span>No capture files are published on this site.</span>
     </div>
   </footer>

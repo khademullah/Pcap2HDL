@@ -28,14 +28,14 @@ Then open a PR on GitHub. Keep gates green (`make MAX_PACKETS=8`, RoCE if you to
 
 ## Parked work (good first PRs)
 
-See Status in [Readme.md](Readme.md) and “Not in 0.3” in [CHANGELOG.md](CHANGELOG.md).
+See Status in [Readme.md](Readme.md) and “Not in this release” under 0.4.0 in [CHANGELOG.md](CHANGELOG.md).
 
 1. **IPv6** — `pkt_header_parser.sv` is IPv4-only. Parse IPv6 and keep IPv4 gates (`make`, RoCE) green.
 2. **VLAN (802.1Q)** — EtherType `0x8100`, then the inner type; shift the L3 window. Do not break untagged `traffic.pcap` / `soft_roce.pcap`.
 3. **More traces in `examples/`** — UDP, failed TCP handshake, truncated or malformed frames. Keep `*.pcap` gitignored; commit the log and a short note in `examples/README.md`. Capture with `tcpdump` or `scripts/soft_roce_veth.sh`.
-4. **Docs** — typos, plusargs, architecture notes. Bring your own NIC is `hdl/nic_rx.sv` plus [docs/nic.html](docs/nic.html). Do not rename `nic_rx` / `make NIC=1` in a drive-by.
+4. **Docs** — typos, plusargs, architecture notes. Bring your own NIC landed in 0.4.0 (`hdl/nic_rx.sv`, [docs/nic.html](docs/nic.html)). Do not rename `nic_rx` / `make NIC=1` in a drive-by.
 
-IPv4 header checksum is in 0.4 (`CSUM mis=0`). Live sniff, host CSRs, and Ethernet FCS stay out unless a note in CHANGELOG says otherwise.
+IPv4 header checksum landed in 0.4.0 (`CSUM mis=0`). Live sniff, host CSRs, and Ethernet FCS stay out unless a note in CHANGELOG says otherwise.
 
 ## Stretch work (landed)
 

@@ -346,20 +346,6 @@
             <tr><td>dpi/pcap_reader.c</td><td>libpcap, BPF, dump, C RSS and csum</td></tr>
           </tbody>
         </table>
-      </section>
-
-      <section id="related">
-        <h2>Related work</h2>
-        <p>
-          Offline pcap-to-AXIS converters (for example net2axis: Python <code>.dat</code> plus a Verilog master)
-          and pure-HDL pcap readers (verilog-utils, VHDL netwiz) solve the stimulus problem.
-          Pcap2HDL keeps libpcap in-process via DPI-C, applies BPF before the bus,
-          dumps accepted beats, and scoreboards RSS and IPv4 checksum in C against HDL.
-        </p>
-        <p>
-          IPv6 and 802.1Q are parked. Live sniff, host CSRs, Ethernet FCS, UVM, and a
-          simulator GUI are out of scope unless CHANGELOG says otherwise.
-        </p>
         <div class="cta gap">
           <a class="btn btn-navy" href="https://github.com/khademullah/Pcap2HDL/blob/main/hdl/tb_pcap_dpi.sv">tb_pcap_dpi.sv</a>
           <a class="btn btn-line" href="index.html">Project site</a>

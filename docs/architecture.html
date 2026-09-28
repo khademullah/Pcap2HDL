@@ -50,6 +50,7 @@
       <a href="#axis">AXI-Stream</a>
       <a href="#beat">Beat</a>
       <a href="#snoop">Streaming DUTs</a>
+      <a href="#score">C vs HDL</a>
       <a href="#hdr">Parser metadata</a>
       <a href="#timing">One packet</a>
       <a href="#files">Sources</a>
@@ -259,6 +260,69 @@
             <tr><td>pkt_roce_icrc</td><td>same beats + is_roce, ip_tot_len</td><td>icrc_valid, ICRC ok / err / skip</td></tr>
           </tbody>
         </table>
+      </section>
+
+      <section id="score">
+        <h2>C vs HDL</h2>
+        <p>
+          DPI-C and SystemVerilog both fold the IPv4 header checksum (RFC 1071).
+          They do not share an implementation: C runs in <code>dpi/pcap_reader.c</code>
+          when the frame is fetched; <code>pkt_ip_csum</code> walks AXIS beats.
+          <code>tb_pcap_dpi</code> latches the C result, then on <code>csum_valid</code>
+          compares <code>csum</code> and <code>csum_ok</code> to
+          <code>get_ip_csum</code> / <code>get_ip_csum_ok</code>.
+          A mismatch increments <code>n_csum_mis</code> and prints
+          <code>[CSUM] … MISMATCH</code>. The gate is <code>mis=0</code>.
+        </p>
+        <figure class="flow-chart" aria-label="IPv4 checksum: DPI-C compared with pkt_ip_csum in the testbench">
+          <svg class="flow-svg" viewBox="0 0 960 380" role="img" xmlns="http://www.w3.org/2000/svg">
+            <title>C versus HDL IPv4 checksum</title>
+            <defs>
+              <marker id="arr2" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto">
+                <path d="M0 0 L10 4 L0 8 Z" fill="#2f8f86"/>
+              </marker>
+            </defs>
+            <g fill="#0c2340" stroke="#2f8f86" stroke-width="1.4">
+              <rect x="355" y="8" width="250" height="50" rx="8"/>
+              <rect x="48" y="120" width="280" height="58" rx="8"/>
+              <rect x="632" y="120" width="280" height="58" rx="8"/>
+              <rect x="48" y="230" width="280" height="50" rx="8"/>
+              <rect x="632" y="230" width="280" height="50" rx="8"/>
+              <rect x="280" y="320" width="400" height="50" rx="8"/>
+            </g>
+            <g fill="#e8f0f7" text-anchor="middle" font-family="Source Sans 3, Segoe UI, Helvetica, sans-serif">
+              <text x="480" y="30" font-size="14" font-weight="700">same IPv4 frame in the pcap</text>
+              <text x="480" y="46" font-size="11" fill="#9bb0c4">fetched once by DPI-C, then streamed on AXIS</text>
+              <text x="188" y="144" font-size="13" font-weight="700">dpi/pcap_reader.c</text>
+              <text x="188" y="162" font-size="11" fill="#9bb0c4">get_ip_csum · RFC 1071 in C</text>
+              <text x="772" y="144" font-size="13" font-weight="700">pkt_ip_csum.sv</text>
+              <text x="772" y="162" font-size="11" fill="#9bb0c4">same fold on AXIS beats</text>
+              <text x="188" y="252" font-size="13" font-weight="700">c_csum, c_csum_ok</text>
+              <text x="188" y="268" font-size="11" fill="#9bb0c4">latched in tb_pcap_dpi at fetch</text>
+              <text x="772" y="252" font-size="13" font-weight="700">csum, csum_ok</text>
+              <text x="772" y="268" font-size="11" fill="#9bb0c4">valid when csum_valid</text>
+              <text x="480" y="342" font-size="13" font-weight="700">tb_pcap_dpi compare → [CSUM]  mis=0</text>
+              <text x="480" y="358" font-size="11" fill="#9bb0c4">mismatch if values or ok-flag differ</text>
+            </g>
+            <g fill="none" stroke="#2f8f86" stroke-width="2" marker-end="url(#arr2)">
+              <path d="M400 58 V90 H188 V112"/>
+              <path d="M560 58 V90 H772 V112"/>
+              <path d="M188 178 V222"/>
+              <path d="M772 178 V222"/>
+              <path d="M188 280 V345 H272"/>
+              <path d="M772 280 V345 H688"/>
+            </g>
+            <g fill="#2f8f86" font-family="IBM Plex Mono, ui-monospace, Menlo, sans-serif" font-size="11">
+              <text x="250" y="78" text-anchor="middle">DPI-C</text>
+              <text x="710" y="78" text-anchor="middle">AXI-Stream</text>
+            </g>
+          </svg>
+          <figcaption>
+            RSS uses the same pattern: <code>get_rss_hash</code> in C versus
+            <code>pkt_rss</code> on parser metadata; the testbench prints
+            <code>[RSS]</code> and counts <code>mis</code>.
+          </figcaption>
+        </figure>
       </section>
 
       <section id="hdr">

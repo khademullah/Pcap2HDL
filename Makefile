@@ -10,8 +10,11 @@ WAVE_VIEWER = gtkwave
 # Source files
 HDL_DIR = hdl
 DPI_DIR = dpi
+# Compile nic_rx only when NIC=1 (rebuilds).
+NIC ?= 0
 SV_SOURCES = \
 	$(HDL_DIR)/tb_pcap_dpi.sv \
+	$(HDL_DIR)/pkt_snoop.sv \
 	$(HDL_DIR)/pkt_size_filter.sv \
 	$(HDL_DIR)/pkt_header_parser.sv \
 	$(HDL_DIR)/pkt_roce_tracker.sv \
@@ -19,6 +22,9 @@ SV_SOURCES = \
 	$(HDL_DIR)/pkt_roce_icrc.sv \
 	$(HDL_DIR)/pkt_rss.sv \
 	$(HDL_DIR)/pkt_ip_csum.sv
+ifeq ($(NIC),1)
+SV_SOURCES += $(HDL_DIR)/nic_rx.sv
+endif
 C_SOURCES  = $(DPI_DIR)/pcap_reader.c
 WAVE_FILE  = simulation_trace.vcd
 LOG_FILE   = simulation.log
@@ -32,6 +38,7 @@ PACE_MAX_US ?= 100
 BP ?= 0
 DUMP ?=
 FILTER ?=
+NIC_PAUSE ?= 0
 # 8 = one byte/cycle (default logs). 64 = tdata[63:0] + tkeep.
 AXIS_W ?= 8
 
@@ -40,6 +47,9 @@ AXIS_W ?= 8
 # --timing: Enables SystemVerilog delays (# delay statements)
 # --trace:  Injects waveform dumping hooks
 VERILATOR_FLAGS = --binary --timing --trace -j 0 --top-module $(TOP_MODULE) -GDATA_W=$(AXIS_W)
+ifeq ($(NIC),1)
+VERILATOR_FLAGS += -DEN_NIC
+endif
 LDFLAGS         = -LDFLAGS "-lpcap"
 
 .PHONY: all
@@ -50,6 +60,10 @@ all: run
 compile: $(SV_SOURCES) $(C_SOURCES)
 	@if [ -f obj_dir/.axis_w ] && [ "$$(cat obj_dir/.axis_w)" != "$(AXIS_W)" ]; then \
 		echo "[MAKE] AXIS_W changed ($(AXIS_W)); rebuilding..."; \
+		rm -rf obj_dir; \
+	fi
+	@if [ -f obj_dir/.nic_w ] && [ "$$(cat obj_dir/.nic_w)" != "$(NIC)" ]; then \
+		echo "[MAKE] NIC=$(NIC) changed; rebuilding..."; \
 		rm -rf obj_dir; \
 	fi
 	@if [ -d obj_dir ] && [ ! -f obj_dir/.src_w ]; then \
@@ -63,6 +77,7 @@ compile: $(SV_SOURCES) $(C_SOURCES)
 	@echo "[MAKE] Verilating and compiling hardware-software layers..."
 	$(VERILATOR) $(VERILATOR_FLAGS) $(SV_SOURCES) $(C_SOURCES) $(LDFLAGS)
 	@echo $(AXIS_W) > obj_dir/.axis_w
+	@echo $(NIC) > obj_dir/.nic_w
 	@echo "$(C_SOURCES) $(SV_SOURCES)" > obj_dir/.src_w
 
 # Run the compiled simulation binary and log output
@@ -72,7 +87,7 @@ run: compile
 	@if [ ! -f ./obj_dir/V$(TOP_MODULE) ]; then \
 		echo "[ERROR] Compiled executable not found!"; exit 1; \
 	fi
-	./obj_dir/V$(TOP_MODULE) +MAX_PACKETS=$(MAX_PACKETS) +PCAP="$(PCAP)" +PACE=$(PACE) +PACE_MAX_US=$(PACE_MAX_US) +BP=$(BP) $(if $(DUMP),+DUMP="$(DUMP)",) $(if $(FILTER),+FILTER="$(FILTER)",) | tee $(LOG_FILE)
+	./obj_dir/V$(TOP_MODULE) +MAX_PACKETS=$(MAX_PACKETS) +PCAP="$(PCAP)" +PACE=$(PACE) +PACE_MAX_US=$(PACE_MAX_US) +BP=$(BP) +NIC_PAUSE=$(NIC_PAUSE) $(if $(DUMP),+DUMP="$(DUMP)",) $(if $(FILTER),+FILTER="$(FILTER)",) | tee $(LOG_FILE)
 
 # Open generated trace file in GTKWave waveform viewer
 .PHONY: wave
@@ -102,6 +117,8 @@ help:
 	@echo "  make run PACE=1                 - IFG from pcap timestamps"
 	@echo "  make run BP=1                   - AXI-Stream tready 50% backpressure"
 	@echo "  make run BP=2                   - random tready"
+	@echo "  make run NIC=1                 - compile nic_rx AXIS slave + [NIC] summary"
+	@echo "  make run NIC=1 NIC_PAUSE=1     - slave toggles s_tready"
 	@echo "  make run AXIS_W=64              - 8-byte AXI-Stream beats (rebuilds)"
 	@echo "  make run DUMP=replay.pcap       - write AXI-Stream frames back to pcap"
 	@echo "  make run FILTER='tcp port 5201' - libpcap BPF before the HDL stream"

@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Architecture — Pcap2HDL</title>
+  <meta name="description" content="How Pcap2HDL moves a Wireshark pcap through DPI-C into a cycle-accurate AXI-Stream, then into parser, trackers, and C-versus-HDL scoreboards.">
+  <link rel="icon" href="pcap2hdl-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap top-inner">
+      <a class="brand" href="index.html">
+        <img src="pcap2hdl-icon.png" width="36" height="36" alt="">
+        Pcap2HDL
+      </a>
+      <nav>
+        <a href="index.html">Home</a>
+        <a class="nav-current" href="architecture.html" aria-current="page">Architecture</a>
+        <a class="hide-sm" href="index.html#dut">DUT</a>
+        <a class="hide-sm" href="index.html#build">Build</a>
+        <a class="btn btn-solid" href="https://github.com/khademullah/Pcap2HDL">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="page-hero" id="top">
+    <div class="wrap">
+      <p class="crumb"><a href="index.html">Home</a> / Architecture</p>
+      <p class="kicker">Design notes</p>
+      <h1>From pcap to DUT</h1>
+      <p class="lede">
+        The capture file is never opened in SystemVerilog. libpcap reads it in C.
+        The testbench is an AXI-Stream master. DUT modules snoop the same beats;
+        they do not pass frames to one another. Trackers and RSS sit on
+        <strong>parser metadata</strong> (<code>hdr_valid</code> and decoded fields), not on AXIS.
+      </p>
+    </div>
+  </section>
+
+  <div class="doc-layout wrap">
+    <aside class="doc-toc" aria-label="On this page">
+      <p>On this page</p>
+      <a href="#overview">Overview</a>
+      <a href="#capture">Capture and DPI-C</a>
+      <a href="#axis">AXI-Stream</a>
+      <a href="#beat">Beat</a>
+      <a href="#snoop">Streaming DUTs</a>
+      <a href="#hdr">Parser metadata</a>
+      <a href="#timing">One packet</a>
+      <a href="#files">Sources</a>
+    </aside>
+
+    <article class="doc">
+      <section id="overview">
+        <h2>Overview</h2>
+        <p>
+          Pcap2HDL is a Verilator bench for early network-silicon bring-up.
+          A Wireshark or tcpdump <code>.pcap</code> is read in C with libpcap,
+          streamed through DPI-C, and driven onto an AXI-Stream so HDL sees the
+          same Ethernet bytes a MAC would, with simulation time frozen.
+          Default <code>DATA_W</code> is 8 (one byte per cycle);
+          <code>make AXIS_W=64</code> packs eight bytes with <code>tkeep</code>.
+          A beat is legal only when <code>tvalid &amp;&amp; tready</code>
+          (<code>BP=1</code> / <code>BP=2</code> stall the slave).
+        </p>
+        <p>
+          The figure is the whole design. Top to bottom is capture → C → testbench → bus.
+          <code>pkt_size_filter</code>, <code>pkt_header_parser</code>,
+          <code>pkt_roce_icrc</code>, and <code>pkt_ip_csum</code> are not a chain:
+          they <strong>snoop the same AXIS</strong> in the same cycles.
+          Only <code>pkt_header_parser</code> fans down to <code>pkt_tcp_tracker</code>,
+          <code>pkt_roce_tracker</code>, and <code>pkt_rss</code>.
+          <code>pkt_roce_icrc</code> stays on AXIS and also takes
+          <code>is_roce</code> and <code>ip_tot_len</code> from <code>pkt_header_parser</code>.
+          <code>pkt_size_filter</code> and <code>pkt_ip_csum</code> have no downward
+          arrows; they never feed the trackers.
+        </p>
+        <figure class="flow-chart" id="diagram" aria-label="Pcap2HDL: pcap to DPI-C to AXI-Stream; parser metadata to TCP, RoCE tracker, and RSS; ICRC from AXIS plus parser flags">
+          <svg class="flow-svg" viewBox="0 0 960 700" role="img" xmlns="http://www.w3.org/2000/svg">
+            <title>Pcap2HDL data path</title>
+            <defs>
+              <marker id="arr" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto">
+                <path d="M0 0 L10 4 L0 8 Z" fill="#2f8f86"/>
+              </marker>
+            </defs>
+            <g fill="#0c2340" stroke="#2f8f86" stroke-width="1.4">
+              <rect x="355" y="8" width="250" height="58" rx="8"/>
+              <rect x="355" y="108" width="250" height="58" rx="8"/>
+              <rect x="340" y="208" width="280" height="58" rx="8"/>
+              <rect x="280" y="308" width="400" height="62" rx="8"/>
+              <rect x="8" y="430" width="220" height="58" rx="8"/>
+              <rect x="248" y="430" width="220" height="58" rx="8"/>
+              <rect x="488" y="430" width="220" height="58" rx="8"/>
+              <rect x="728" y="430" width="224" height="58" rx="8"/>
+              <rect x="128" y="610" width="200" height="58" rx="8"/>
+              <rect x="380" y="610" width="200" height="58" rx="8"/>
+              <rect x="632" y="610" width="200" height="58" rx="8"/>
+            </g>
+            <g fill="#e8f0f7" text-anchor="middle" font-family="Source Sans 3, Segoe UI, Helvetica, sans-serif">
+              <text x="480" y="32" font-size="14" font-weight="700">.pcap on disk</text>
+              <text x="480" y="50" font-size="11" fill="#9bb0c4">Wireshark / tcpdump</text>
+              <text x="480" y="132" font-size="14" font-weight="700">dpi/pcap_reader.c</text>
+              <text x="480" y="150" font-size="11" fill="#9bb0c4">libpcap + optional BPF</text>
+              <text x="480" y="232" font-size="14" font-weight="700">tb_pcap_dpi.sv</text>
+              <text x="480" y="250" font-size="11" fill="#9bb0c4">AXIS master + tready slave</text>
+              <text x="480" y="332" font-size="14" font-weight="700">AXI-Stream</text>
+              <text x="480" y="350" font-size="11" fill="#9bb0c4">tdata tkeep tvalid tready tstart tlast  ·  tuser tuser_err</text>
+              <text x="118" y="454" font-size="13" font-weight="700">pkt_size_filter</text>
+              <text x="358" y="454" font-size="13" font-weight="700">pkt_header_parser</text>
+              <text x="598" y="454" font-size="13" font-weight="700">pkt_roce_icrc</text>
+              <text x="840" y="454" font-size="13" font-weight="700">pkt_ip_csum</text>
+              <text x="228" y="634" font-size="13" font-weight="700">pkt_tcp_tracker</text>
+              <text x="480" y="634" font-size="13" font-weight="700">pkt_roce_tracker</text>
+              <text x="732" y="634" font-size="13" font-weight="700">pkt_rss</text>
+            </g>
+            <g fill="none" stroke="#2f8f86" stroke-width="2" marker-end="url(#arr)">
+              <path d="M480 66 V100"/>
+              <path d="M480 166 V200"/>
+              <path d="M480 266 V300"/>
+              <path d="M480 370 V390 H118 V422"/>
+              <path d="M480 390 H358 V422"/>
+              <path d="M480 390 H598 V422"/>
+              <path d="M480 390 H840 V422"/>
+              <path d="M358 488 V530 H228 V602"/>
+              <path d="M358 530 H480 V602"/>
+              <path d="M358 530 H732 V602"/>
+              <path d="M468 459 H486"/>
+            </g>
+            <g fill="#2f8f86" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, Menlo, sans-serif" font-size="10">
+              <text x="480" y="90">DPI-C: open_pcap, fetch_next_packet, get_packet_byte, dump_*</text>
+              <text x="228" y="548">hdr_valid + fields</text>
+              <text x="480" y="548">hdr_valid + BTH</text>
+              <text x="732" y="548">hdr_valid + 4-tuple</text>
+              <text x="478" y="422">is_roce, ip_tot_len</text>
+            </g>
+          </svg>
+          <figcaption>
+            AXIS broadcast to <code>pkt_size_filter</code>, <code>pkt_header_parser</code>,
+            <code>pkt_roce_icrc</code>, and <code>pkt_ip_csum</code>.
+            Parser metadata from <code>pkt_header_parser</code> only.
+            <code>pkt_roce_icrc</code> also samples parser <code>is_roce</code> / <code>ip_tot_len</code>.
+            Optional <code>DUMP=</code> writes accepted beats back to a pcap.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section id="capture">
+        <h2>Capture and DPI-C</h2>
+        <p>
+          The top of the figure is the only path that touches the filesystem.
+          <code>make PCAP=traffic.pcap</code> plusargs into <code>tb_pcap_dpi.sv</code>.
+          Imports are implemented in <code>dpi/pcap_reader.c</code>.
+          BPF skip happens here: skipped frames never become beats.
+          C also computes RSS and IPv4 checksum for the scoreboard
+          (<code>get_rss_hash</code>, <code>get_ip_csum</code>).
+          Optional <code>DUMP=</code> writes accepted beats back
+          (<code>dump_put_byte</code> / <code>dump_packet</code>) so Wireshark can open the round-trip.
+        </p>
+        <table>
+          <thead>
+            <tr><th>Import</th><th>Role</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>open_pcap</td><td>Open capture; fail the sim if missing</td></tr>
+            <tr><td>set_pcap_filter</td><td>Compile BPF; skip is counted, not silent</td></tr>
+            <tr><td>fetch_next_packet</td><td>Next matched frame length, or 0 at EOF</td></tr>
+            <tr><td>get_packet_byte</td><td>One captured byte for the current frame</td></tr>
+            <tr><td>get_wire_len / get_ts_* / get_datalink</td><td>Wire length, timestamps, DLT</td></tr>
+            <tr><td>get_rss_* / get_ip_csum_*</td><td>C golden for HDL scoreboard</td></tr>
+            <tr><td>open_pcap_dump / dump_put_byte / dump_packet</td><td>Round-trip pcap of accepted beats</td></tr>
+          </tbody>
+        </table>
+        <p class="note">
+          Skipped BPF frames never raise <code>tvalid</code>. Truncated captures
+          (captured length &lt; wire length) still stream; ICRC may <code>skip</code> rather than fail.
+        </p>
+      </section>
+
+      <section id="axis">
+        <h2>AXI-Stream</h2>
+        <p>
+          The wide bar in the figure is the only packet interface.
+          For each matched frame the testbench puts bytes on the bus.
+          Clock is 10 ns (<code>always #5 clk = ~clk</code>). Reset is active-low.
+          There is no FIFO between DUT modules; the same wires go to
+          <code>pkt_size_filter</code>, <code>pkt_header_parser</code>,
+          <code>pkt_roce_icrc</code>, and <code>pkt_ip_csum</code>.
+          <code>tuser</code> is the C RSS hash and <code>tuser_err</code> is C checksum-fail;
+          <code>pkt_rss</code> and <code>pkt_ip_csum</code> do not read them.
+        </p>
+        <h3 class="doc-h3" id="beat">Beat</h3>
+        <p>
+          A <strong>beat</strong> is one AXI-Stream handshake: one clock where
+          <code>tvalid</code> and <code>tready</code> are both 1. That is the only
+          cycle the DUT may take <code>tdata</code> / <code>tkeep</code>.
+          In the HDL this is <code>fire</code> (<code>tvalid &amp;&amp; tready</code>).
+        </p>
+        <p>
+          <code>DATA_W=8</code> → one beat is one byte.
+          <code>make AXIS_W=64</code> → one beat is up to eight bytes;
+          <code>tkeep</code> marks which lanes are valid.
+          <code>tstart</code> is the first beat of the frame, <code>tlast</code> the last.
+          If <code>tready</code> is 0 (<code>BP=1</code> / <code>BP=2</code>), there is
+          no beat that cycle even if <code>tvalid</code> is 1.
+          A 64-byte frame is 64 beats at 8 bits, or 8 beats at 64 bits
+          (the last beat may have a short <code>tkeep</code>).
+        </p>
+        <p>
+          The testbench drives <code>tdata</code>/<code>tkeep</code> on negedge,
+          sets <code>tvalid</code>, then waits posedge until <code>tready</code>.
+        </p>
+        <table>
+          <thead>
+            <tr><th>Signal</th><th>Width</th><th>Direction (DUT)</th><th>Meaning</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>clk / rst_n</td><td>1</td><td>in</td><td>Synchronous design; async assert of reset in the TB</td></tr>
+            <tr><td>tdata</td><td>DATA_W</td><td>in</td><td>Payload; little-endian lanes when DATA_W=64</td></tr>
+            <tr><td>tkeep</td><td>DATA_W/8</td><td>in</td><td>Valid bytes in the beat; all 1s except a short last beat</td></tr>
+            <tr><td>tvalid</td><td>1</td><td>in</td><td>Master has a beat</td></tr>
+            <tr><td>tready</td><td>1</td><td>in*</td><td>Slave accepts. TB drives it; DUT must not sample without it</td></tr>
+            <tr><td>tstart</td><td>1</td><td>in</td><td>First beat of the frame (not in AMBA AXIS; explicit here)</td></tr>
+            <tr><td>tlast</td><td>1</td><td>in</td><td>Last beat of the frame</td></tr>
+            <tr><td>tuser</td><td>32</td><td>in</td><td>C RSS hash when valid; for a custom NIC DUT</td></tr>
+            <tr><td>tuser_err</td><td>1</td><td>in</td><td>C checksum fail; does not overwrite <code>tuser</code></td></tr>
+          </tbody>
+        </table>
+        <p class="note">
+          *<code>tready</code> is produced by the testbench, not by the DUT modules.
+          The DUT is a <strong>slave observer</strong>: it may only advance on fire
+          (<code>tvalid &amp;&amp; tready</code>). Confirm that in the wave before trusting parse.
+        </p>
+      </section>
+
+      <section id="snoop">
+        <h2>Streaming DUTs</h2>
+        <p>
+          <code>pkt_size_filter</code>, <code>pkt_header_parser</code>,
+          <code>pkt_roce_icrc</code>, and <code>pkt_ip_csum</code> all sample
+          <code>tvalid &amp;&amp; tready</code>. They are observers, not a chain.
+          <code>pkt_size_filter</code> and <code>pkt_ip_csum</code> stop on AXIS.
+          Only <code>pkt_header_parser</code> continues downward.
+          <code>pkt_roce_icrc</code> stays on AXIS and also takes parser
+          <code>is_roce</code> and <code>ip_tot_len</code>.
+        </p>
+        <table>
+          <thead>
+            <tr><th>Module</th><th>On AXIS</th><th>Produces</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>pkt_size_filter</td><td>tkeep popcount</td><td>pkt_done, pkt_bytes, runt / standard / jumbo</td></tr>
+            <tr><td>pkt_header_parser</td><td>byte index through Ethernet / IP / L4 / BTH</td><td>hdr_valid and header fields</td></tr>
+            <tr><td>pkt_ip_csum</td><td>own IHL walk</td><td>csum_valid, csum, ok / err / skip vs C</td></tr>
+            <tr><td>pkt_roce_icrc</td><td>same beats + is_roce, ip_tot_len</td><td>icrc_valid, ICRC ok / err / skip</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="hdr">
+        <h2>Parser metadata</h2>
+        <p>
+          NIC pipelines call this <strong>parser metadata</strong> (P4: a packet header
+          vector). <code>pkt_tcp_tracker</code>, <code>pkt_roce_tracker</code>, and
+          <code>pkt_rss</code> hang only off <code>pkt_header_parser</code>.
+          They never see <code>tdata</code>.
+          When <code>hdr_valid</code> is high for a cycle, the fields below are that
+          metadata. The testbench compares HDL RSS and checksum to C
+          (<code>mis=0</code>).
+        </p>
+        <div class="duo">
+          <table>
+            <thead>
+              <tr><th>Group</th><th>Signals</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Classify</td><td>is_ipv4, is_non_ipv4, is_truncated, is_tcp, is_udp, is_roce, is_arp, is_vxlan</td></tr>
+              <tr><td>L2</td><td>dst_mac, src_mac, ethertype (0480, 0806, …)</td></tr>
+              <tr><td>IPv4</td><td>src_ip, dst_ip, ip_ttl, ip_tot_len, ip_proto, is_len_mismatch</td></tr>
+              <tr><td>L4</td><td>src_port, dst_port; TCP seq, ack, flags, plen</td></tr>
+              <tr><td>RoCE BTH</td><td>opcode, pkey, ackreq, dest_qp, psn</td></tr>
+              <tr><td>VXLAN</td><td>vxlan_vni, inner type via the same L2/L3 walk</td></tr>
+            </tbody>
+          </table>
+          <table>
+            <thead>
+              <tr><th>Consumer</th><th>Uses</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>pkt_tcp_tracker</td><td>hdr_valid, is_tcp, 4-tuple, seq, ack, flags, plen</td></tr>
+              <tr><td>pkt_roce_tracker</td><td>hdr_valid, is_roce, IPs, opcode, dest_qp, psn</td></tr>
+              <tr><td>pkt_rss</td><td>hdr_valid, is_ipv4, truncated, proto, 4-tuple</td></tr>
+              <tr><td>pkt_roce_icrc</td><td>AXIS plus is_roce, ip_tot_len (not hdr_valid alone)</td></tr>
+              <tr><td>tb scoreboard</td><td>rss_hash vs get_rss_hash; csum vs get_ip_csum</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="timing">
+        <h2>One packet</h2>
+        <p>
+          Walk the figure once around the clock. DPI returns length and bytes; C RSS
+          and checksum are latched. Beats run on AXIS from <code>tstart</code> to
+          <code>tlast</code>; <code>pkt_size_filter</code>, <code>pkt_header_parser</code>,
+          <code>pkt_roce_icrc</code>, and <code>pkt_ip_csum</code> update every fire.
+          When the header is complete (often before <code>tlast</code> on a long frame),
+          <code>hdr_valid</code> pulses and <code>pkt_tcp_tracker</code>,
+          <code>pkt_roce_tracker</code>, and <code>pkt_rss</code> fire.
+          On <code>tlast</code>, <code>pkt_size_filter</code> pulses <code>pkt_done</code>
+          and <code>pkt_roce_icrc</code> checks the last four bytes if RoCE and not truncated.
+          Then <code>tvalid</code> drops; <code>PACE</code> may insert IFG from pcap
+          timestamps (capped by <code>PACE_MAX_US</code>), plus three idle cycles by default.
+        </p>
+        <p>
+          In the wave, start with <code>tvalid</code> / <code>tready</code> /
+          <code>tstart</code> / <code>tlast</code> / <code>tdata</code> on one packet.
+          Then <code>hdr_valid</code> and <code>ethertype</code>, then
+          <code>tcp_evt</code> or <code>trk_evt</code>. If AXIS is wrong, parser and
+          trackers will lie even if the <code>.pcap</code> is fine.
+          Run a sim, then <code>make wave</code> (GTKWave on <code>simulation_trace.vcd</code>).
+          Logs: <code>[HDR]</code>, <code>[TCP]</code>, <code>[TRK]</code>,
+          <code>[RSS]</code>, <code>[CSUM]</code>, <code>[DUT]</code>.
+        </p>
+      </section>
+
+      <section id="files">
+        <h2>Sources</h2>
+        <table>
+          <thead>
+            <tr><th>Path</th><th>Role</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>hdl/tb_pcap_dpi.sv</td><td>DPI imports, AXIS master, plusargs, logs, instantiations</td></tr>
+            <tr><td>hdl/pkt_size_filter.sv</td><td>Runt / standard / jumbo from tkeep popcount</td></tr>
+            <tr><td>hdl/pkt_header_parser.sv</td><td>Streaming L2–L4, ARP, VXLAN, Soft-RoCEv2 BTH</td></tr>
+            <tr><td>hdl/pkt_tcp_tracker.sv</td><td>Handshake and next-seq CAM</td></tr>
+            <tr><td>hdl/pkt_roce_tracker.sv</td><td>PSN / message / reverse ACK</td></tr>
+            <tr><td>hdl/pkt_roce_icrc.sv</td><td>Masked CRC32 vs last 4 bytes</td></tr>
+            <tr><td>hdl/pkt_rss.sv</td><td>Toeplitz; same key as C</td></tr>
+            <tr><td>hdl/pkt_ip_csum.sv</td><td>IPv4 header checksum; same fold as C</td></tr>
+            <tr><td>dpi/pcap_reader.c</td><td>libpcap, BPF, dump, C RSS and csum</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="related">
+        <h2>Related work</h2>
+        <p>
+          Offline pcap-to-AXIS converters (for example net2axis: Python <code>.dat</code> plus a Verilog master)
+          and pure-HDL pcap readers (verilog-utils, VHDL netwiz) solve the stimulus problem.
+          Pcap2HDL keeps libpcap in-process via DPI-C, applies BPF before the bus,
+          dumps accepted beats, and scoreboards RSS and IPv4 checksum in C against HDL.
+        </p>
+        <p>
+          IPv6 and 802.1Q are parked. Live sniff, host CSRs, Ethernet FCS, UVM, and a
+          simulator GUI are out of scope unless CHANGELOG says otherwise.
+        </p>
+        <div class="cta gap">
+          <a class="btn btn-navy" href="https://github.com/khademullah/Pcap2HDL/blob/main/hdl/tb_pcap_dpi.sv">tb_pcap_dpi.sv</a>
+          <a class="btn btn-line" href="index.html">Project site</a>
+          <a class="btn btn-line" href="https://github.com/khademullah/Pcap2HDL/blob/main/CONTRIBUTING.md">Contributing</a>
+        </div>
+      </section>
+    </article>
+  </div>
+
+  <footer class="foot">
+    <div class="wrap foot-inner">
+      <span>Pcap2HDL · MIT · <a href="index.html">Home</a> · Architecture</span>
+      <span>No capture files are published on this site.</span>
+    </div>
+  </footer>
+</body>
+</html>

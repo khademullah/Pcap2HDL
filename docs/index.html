@@ -19,6 +19,7 @@
         Pcap2HDL
       </a>
       <nav>
+        <a href="architecture.html">Architecture</a>
         <a class="hide-sm" href="#overview">Overview</a>
         <a class="hide-sm" href="#pipeline">Pipeline</a>
         <a class="hide-sm" href="#dut">DUT</a>
@@ -45,8 +46,8 @@
         </p>
         <div class="cta">
           <a class="btn btn-solid" href="https://github.com/khademullah/Pcap2HDL">View repository</a>
+          <a class="btn btn-ghost" href="architecture.html">Architecture</a>
           <a class="btn btn-ghost" href="#demo">Watch demo</a>
-          <a class="btn btn-ghost" href="https://github.com/khademullah/Pcap2HDL/blob/main/Readme.md">Read the docs</a>
         </div>
         <p class="meta">Tagged release 0.3.0 · Unreleased 0.4 (checksum, ARP/VXLAN, CI) · MIT · Linux / Verilator 5.032+</p>
       </div>
@@ -117,7 +118,10 @@
   <section class="block alt" id="pipeline">
     <div class="wrap">
       <h2>From pcap to DUT</h2>
-      <p class="sub">Sources sit under <code>hdl/</code> and <code>dpi/</code>. Traces stay on the machine that runs the sim (gitignored).</p>
+      <p class="sub">
+        Sources sit under <code>hdl/</code> and <code>dpi/</code>. Traces stay on the machine that runs the sim (gitignored).
+        Signal-level notes: <a href="architecture.html">Architecture</a>.
+      </p>
       <div class="pipe">
         <div>.pcap<small>libpcap</small></div>
         <div>BPF<small>optional FILTER</small></div>
@@ -249,7 +253,8 @@ make AXIS_W=64 PCAP=soft_roce.pcap</pre>
         </article>
       </div>
       <div class="cta gap">
-        <a class="btn btn-navy" href="https://github.com/khademullah/Pcap2HDL/blob/main/CONTRIBUTING.md">Contributing guide</a>
+        <a class="btn btn-navy" href="architecture.html">Architecture</a>
+        <a class="btn btn-line" href="https://github.com/khademullah/Pcap2HDL/blob/main/CONTRIBUTING.md">Contributing guide</a>
         <a class="btn btn-line" href="https://github.com/khademullah/Pcap2HDL/blob/main/CHANGELOG.md">Release notes</a>
         <a class="btn btn-line" href="https://github.com/khademullah/Pcap2HDL/blob/main/LICENSE">MIT License</a>
       </div>

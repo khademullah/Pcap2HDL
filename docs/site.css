@@ -394,11 +394,10 @@ pre.mermaid {
   color: #d5e6ee;
   font-size: 1.08rem;
   max-width: 46rem;
+  line-height: 1.55;
 }
-.page-hero code {
-  background: #e7f4f2;
-  color: #0c2340;
-  font-weight: 650;
+.page-hero .lede + .lede {
+  margin-top: 1rem;
 }
 .crumb {
   margin: 0 0 0.85rem;

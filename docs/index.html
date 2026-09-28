@@ -20,7 +20,7 @@
       </a>
       <nav>
         <a href="architecture.html">Architecture</a>
-        <a class="hide-sm" href="nic.html">NIC RX</a>
+        <a class="hide-sm" href="nic.html">Bring your own NIC</a>
         <a class="hide-sm" href="#overview">Overview</a>
         <a class="hide-sm" href="#pipeline">Pipeline</a>
         <a class="hide-sm" href="#dut">DUT</a>
@@ -48,7 +48,7 @@
         <div class="cta">
           <a class="btn btn-solid" href="https://github.com/khademullah/Pcap2HDL">View repository</a>
           <a class="btn btn-ghost" href="architecture.html">Architecture</a>
-          <a class="btn btn-ghost" href="nic.html">NIC RX</a>
+          <a class="btn btn-ghost" href="nic.html">Bring your own NIC</a>
           <a class="btn btn-ghost" href="#demo">Watch demo</a>
         </div>
         <p class="meta">Tagged release 0.3.0 · Unreleased 0.4 (checksum, ARP/VXLAN, CI) · MIT · Linux / Verilator 5.032+</p>
@@ -123,7 +123,7 @@
       <p class="sub">
         Sources sit under <code>hdl/</code> and <code>dpi/</code>. Traces stay on the machine that runs the sim (gitignored).
         Signal-level notes: <a href="architecture.html">Architecture</a>.
-        NIC slave template: <a href="nic.html">NIC RX</a>.
+        Bring your own NIC: <a href="nic.html">AXIS slave slot</a>.
       </p>
       <div class="pipe">
         <div>.pcap<small>libpcap</small></div>
@@ -167,7 +167,7 @@
           <tr><td>DUMP=</td><td>Write accepted AXI-Stream bytes back to a pcap (same DLT)</td></tr>
           <tr><td>BP=1 / BP=2</td><td>Extra stall AND-ed with <code>nic_rx</code> <code>s_tready</code></td></tr>
           <tr><td>NIC=1</td><td>Compile <code>nic_rx</code> and print <code>[NIC] rx=</code> (rebuilds)</td></tr>
-          <tr><td>NIC_PAUSE=1</td><td>With <code>NIC=1</code>: <code>nic_rx</code> toggles <code>bubble</code> so <code>s_tready</code> is 50%. Not the same as <code>BP</code> (<code>ready_mask</code>). See <a href="nic.html#pause">NIC RX</a>.</td></tr>
+          <tr><td>NIC_PAUSE=1</td><td>With <code>NIC=1</code>: <code>nic_rx</code> toggles <code>bubble</code> so <code>s_tready</code> is 50%. Not the same as <code>BP</code> (<code>ready_mask</code>). See <a href="nic.html#pause">Bring your own NIC</a>.</td></tr>
           <tr><td>PACE=1</td><td>IFG from pcap timestamps, capped by <code>PACE_MAX_US</code> (default 100)</td></tr>
           <tr><td>AXIS_W=8|64</td><td>Bits on <code>tdata</code>; 64 uses <code>tkeep</code> lanes</td></tr>
         </tbody>
@@ -245,7 +245,7 @@ make AXIS_W=64 PCAP=soft_roce.pcap</pre>
             <li>IPv6 in <code>pkt_header_parser.sv</code>, keep IPv4/RoCE gates green</li>
             <li>802.1Q VLAN: EtherType 0x8100, then inner type; untagged captures must not break</li>
             <li>More example logs (failed handshake, malformed frames); do not commit <code>.pcap</code> files</li>
-            <li>NIC RX template: <a href="nic.html">nic.html</a> (<code>make NIC=1</code>)</li>
+            <li>Bring your own NIC: <a href="nic.html">nic.html</a> (<code>make NIC=1</code>)</li>
           </ul>
         </article>
         <article class="card">
@@ -260,7 +260,7 @@ make AXIS_W=64 PCAP=soft_roce.pcap</pre>
       </div>
       <div class="cta gap">
         <a class="btn btn-navy" href="architecture.html">Architecture</a>
-        <a class="btn btn-line" href="nic.html">NIC RX</a>
+        <a class="btn btn-line" href="nic.html">Bring your own NIC</a>
         <a class="btn btn-line" href="https://github.com/khademullah/Pcap2HDL/blob/main/CONTRIBUTING.md">Contributing guide</a>
         <a class="btn btn-line" href="https://github.com/khademullah/Pcap2HDL/blob/main/CHANGELOG.md">Release notes</a>
         <a class="btn btn-line" href="https://github.com/khademullah/Pcap2HDL/blob/main/LICENSE">MIT License</a>

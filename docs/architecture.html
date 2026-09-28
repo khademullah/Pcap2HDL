@@ -21,7 +21,7 @@
       <nav>
         <a href="index.html">Home</a>
         <a href="architecture.html" class="nav-current" aria-current="page">Architecture</a>
-        <a class="hide-sm" href="nic.html">NIC RX</a>
+        <a class="hide-sm" href="nic.html">Bring your own NIC</a>
         <a class="hide-sm" href="index.html#dut">DUT</a>
         <a class="hide-sm" href="index.html#build">Build</a>
         <a class="btn btn-solid" href="https://github.com/khademullah/Pcap2HDL">GitHub</a>
@@ -52,7 +52,7 @@
       <a href="#capture">Capture and DPI-C</a>
       <a href="#axis">AXI-Stream</a>
       <a href="#beat">Beat</a>
-      <a href="#nic">Attach a NIC RX</a>
+      <a href="#nic">Bring your own NIC</a>
       <a href="#snoop">Streaming DUTs</a>
       <a href="#score">C vs HDL</a>
       <a href="#hdr">Parser metadata</a>
@@ -74,7 +74,7 @@
           Default <code>make</code> uses bench <code>BP</code> as <code>tready</code>.
           <code>make NIC=1</code> lets <code>nic_rx</code> drive ready (with <code>BP</code>
           as <code>ready_mask</code>). Template diagrams:
-          <a href="nic.html">NIC RX</a>.
+          <a href="nic.html">Bring your own NIC</a>.
         </p>
         <p>
           The figure is the whole design. Top to bottom is capture → C → testbench → bus.
@@ -239,17 +239,17 @@
           </tbody>
         </table>
         <p class="note">
-          *Observers input <code>tready</code>. The NIC RX template outputs
+          *Observers input <code>tready</code>. The in-tree <code>nic_rx</code> outputs
           <code>s_tready</code>, which already includes bench <code>BP</code> as
           <code>ready_mask</code>. Confirm fire in the wave before trusting parse.
         </p>
       </section>
 
       <section id="nic">
-        <h2>Attach a NIC RX</h2>
+        <h2>Bring your own NIC</h2>
         <p>
           Hierarchy, AXIS pin template, and <code>make NIC=1</code> are on the
-          <a href="nic.html">NIC RX</a> page. <code>hdl/nic_rx.sv</code> is the
+          <a href="nic.html">Bring your own NIC</a> page. <code>hdl/nic_rx.sv</code> is the
           in-tree slave; observers stay under <code>u_snoop</code>.
           Without the flag the log prints <code>[NIC] off</code>.
         </p>
@@ -259,7 +259,7 @@
           <code>drop=0</code>, <code>byte_mis=0</code>, <code>mis=0</code>.
         </p>
         <div class="cta gap">
-          <a class="btn btn-navy" href="nic.html">NIC RX template</a>
+          <a class="btn btn-navy" href="nic.html">Bring your own NIC</a>
           <a class="btn btn-line" href="https://github.com/khademullah/Pcap2HDL/blob/main/hdl/nic_rx.sv">nic_rx.sv</a>
         </div>
       </section>
@@ -440,7 +440,7 @@
         </table>
         <div class="cta gap">
           <a class="btn btn-navy" href="https://github.com/khademullah/Pcap2HDL/blob/main/hdl/tb_pcap_dpi.sv">tb_pcap_dpi.sv</a>
-          <a class="btn btn-line" href="nic.html">NIC RX</a>
+          <a class="btn btn-line" href="nic.html">Bring your own NIC</a>
           <a class="btn btn-line" href="https://github.com/khademullah/Pcap2HDL/blob/main/CONTRIBUTING.md">Contributing</a>
         </div>
       </section>
@@ -449,7 +449,7 @@
 
   <footer class="foot">
     <div class="wrap foot-inner">
-      <span>Pcap2HDL · MIT · <a href="index.html">Home</a> · Architecture · <a href="nic.html">NIC RX</a></span>
+      <span>Pcap2HDL · MIT · <a href="index.html">Home</a> · Architecture · <a href="nic.html">Bring your own NIC</a></span>
       <span>No capture files are published on this site.</span>
     </div>
   </footer>

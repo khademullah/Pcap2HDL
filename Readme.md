@@ -10,7 +10,7 @@ Pcap2HDL streams `.pcap` files into Verilator through DPI-C (`libpcap`). Each ca
 
 Typical uses: early bring-up of FPGA or ASIC packet pipelines (classification, DPI, RoCE-aware paths) before silicon or a live Ethernet port is available.
 
-Current release: [0.3.0](CHANGELOG.md). Project site: [khademullah.github.io/Pcap2HDL](https://khademullah.github.io/Pcap2HDL/). Architecture (DPI-C, AXI-Stream, parser metadata): [architecture](https://khademullah.github.io/Pcap2HDL/architecture.html). NIC RX slave template: [nic](https://khademullah.github.io/Pcap2HDL/nic.html). Demo (16:9): [pcap2hdl-demo.mp4](https://khademullah.github.io/Pcap2HDL/pcap2hdl-demo.mp4).
+Current release: [0.3.0](CHANGELOG.md). Project site: [khademullah.github.io/Pcap2HDL](https://khademullah.github.io/Pcap2HDL/). Architecture (DPI-C, AXI-Stream, parser metadata): [architecture](https://khademullah.github.io/Pcap2HDL/architecture.html). Bring your own NIC: [nic](https://khademullah.github.io/Pcap2HDL/nic.html). Demo (16:9): [pcap2hdl-demo.mp4](https://khademullah.github.io/Pcap2HDL/pcap2hdl-demo.mp4).
 
 ## Requirements
 
@@ -98,7 +98,7 @@ make clean
 
 Traces are selected at runtime; a rebuild is not required when only `PCAP` or `MAX_PACKETS` changes. Changing `AXIS_W` or `NIC` rebuilds.
 
-## Attach your NIC RX
+## Bring your own NIC
 
 Build with `make NIC=1`. `hdl/nic_rx.sv` is compiled and `u_nic_rx` is the slave. Observers live under `u_snoop`.
 

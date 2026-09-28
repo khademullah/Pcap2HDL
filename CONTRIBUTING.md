@@ -33,7 +33,7 @@ See Status in [Readme.md](Readme.md) and “Not in 0.3” in [CHANGELOG.md](CHAN
 1. **IPv6** — `pkt_header_parser.sv` is IPv4-only. Parse IPv6 and keep IPv4 gates (`make`, RoCE) green.
 2. **VLAN (802.1Q)** — EtherType `0x8100`, then the inner type; shift the L3 window. Do not break untagged `traffic.pcap` / `soft_roce.pcap`.
 3. **More traces in `examples/`** — UDP, failed TCP handshake, truncated or malformed frames. Keep `*.pcap` gitignored; commit the log and a short note in `examples/README.md`. Capture with `tcpdump` or `scripts/soft_roce_veth.sh`.
-4. **Docs** — typos, plusargs, architecture notes. Custom DUT attach is `hdl/nic_rx.sv` plus “Attach your NIC RX” in [Readme.md](Readme.md).
+4. **Docs** — typos, plusargs, architecture notes. Bring your own NIC is `hdl/nic_rx.sv` plus [docs/nic.html](docs/nic.html). Do not rename `nic_rx` / `make NIC=1` in a drive-by.
 
 IPv4 header checksum is in 0.4 (`CSUM mis=0`). Live sniff, host CSRs, and Ethernet FCS stay out unless a note in CHANGELOG says otherwise.
 

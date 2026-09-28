@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>NIC RX template — Pcap2HDL</title>
-  <meta name="description" content="How to compile nic_rx with make NIC=1, the instance hierarchy under tb_pcap_dpi, and the AXIS slave pin template.">
+  <title>Bring your own NIC (NIC RX as an AXI-Stream slave) — Pcap2HDL</title>
+  <meta name="description" content="Bring your own NIC: make NIC=1 compiles nic_rx as the AXIS slave; swap u_nic_rx for your RX. Observers stay under u_snoop.">
   <link rel="icon" href="pcap2hdl-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -21,7 +21,7 @@
       <nav>
         <a href="index.html">Home</a>
         <a href="architecture.html">Architecture</a>
-        <a class="nav-current" href="nic.html" aria-current="page">NIC RX</a>
+        <a class="nav-current" href="nic.html" aria-current="page">Bring your own NIC</a>
         <a class="hide-sm" href="index.html#build">Build</a>
         <a class="btn btn-solid" href="https://github.com/khademullah/Pcap2HDL">GitHub</a>
       </nav>
@@ -30,14 +30,20 @@
 
   <section class="page-hero" id="top">
     <div class="wrap">
-      <p class="crumb"><a href="index.html">Home</a> / <a href="architecture.html">Architecture</a> / NIC RX</p>
-      <p class="kicker">Attach template</p>
-      <h1>NIC RX as an AXI-Stream slave</h1>
+      <p class="crumb"><a href="index.html">Home</a> / <a href="architecture.html">Architecture</a> / Bring your own NIC</p>
+      <p class="kicker">AXIS slave slot</p>
+      <h1>Bring your own NIC (NIC RX as an AXI-Stream slave)</h1>
       <p class="lede">
-        Default <code>make</code> does not compile the NIC. <code>make NIC=1</code>
-        adds <code>hdl/nic_rx.sv</code> as <code>u_nic_rx</code> and prints
-        <code>[NIC]</code> totals. Observers stay under <code>u_snoop</code>.
-        Swap <code>u_nic_rx</code> for your RX; keep the <code>s_*</code> pins.
+        Pcap2HDL now has a slot for a real NIC receive pipeline, not only the
+        parser/scoreboard observers.
+      </p>
+      <p class="lede">
+        How it works: make NIC=1 compiles an AXI-Stream slave (nic_rx). It drives
+        tready. The existing checks (pkt_snoop: parser, TCP/RoCE, RSS, checksum)
+        sit beside it on the same bus — they do not sit after the NIC in a FIFO
+        chain. Someone else swaps that slave instance for their RX, keeps the
+        same pins (s_tdata / s_tvalid / s_tready / …), and still replays a .pcap
+        through DPI-C into Verilator.
       </p>
     </div>
   </section>
@@ -228,7 +234,7 @@
         </p>
         <figure class="flow-chart" aria-label="AXI-Stream master, nic_rx slave pins, pkt_snoop observers">
           <svg class="flow-svg" viewBox="0 0 960 340" role="img" xmlns="http://www.w3.org/2000/svg">
-            <title>NIC RX AXI-Stream pin template</title>
+            <title>Bring your own NIC AXI-Stream pin template</title>
             <defs>
               <marker id="parr" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto">
                 <path d="M0 0 L10 4 L0 8 Z" fill="#2f8f86"/>
@@ -395,7 +401,7 @@ make NIC=1 NIC_PAUSE=1</pre>
 
   <footer class="foot">
     <div class="wrap foot-inner">
-      <span>Pcap2HDL · MIT · <a href="index.html">Home</a> · <a href="architecture.html">Architecture</a> · NIC RX</span>
+      <span>Pcap2HDL · MIT · <a href="index.html">Home</a> · <a href="architecture.html">Architecture</a> · Bring your own NIC</span>
       <span>No capture files are published on this site.</span>
     </div>
   </footer>

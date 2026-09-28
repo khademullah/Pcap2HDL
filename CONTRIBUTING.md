@@ -23,7 +23,7 @@ Then open a PR on GitHub. Keep gates green (`make MAX_PACKETS=8`, RoCE if you to
 ## What you need
 
 - Cycle-accurate thinking: bytes on `tdata` / `tkeep`, packet edges on `tstart` / `tlast`.
-- Slave handshake: DUT samples only when `tvalid && tready`. `make BP=1` is 50% stall; `make BP=2` is random.
+- Slave handshake: `nic_rx` drives `s_tready`. `make BP=1` is extra 50% stall; `make BP=2` is extra random. DUT still samples only when `tvalid && tready`.
 - Packet layout: Ethernet, IPv4, TCP/UDP, optional RoCE BTH.
 
 ## Parked work (good first PRs)
@@ -33,7 +33,7 @@ See Status in [Readme.md](Readme.md) and “Not in 0.3” in [CHANGELOG.md](CHAN
 1. **IPv6** — `pkt_header_parser.sv` is IPv4-only. Parse IPv6 and keep IPv4 gates (`make`, RoCE) green.
 2. **VLAN (802.1Q)** — EtherType `0x8100`, then the inner type; shift the L3 window. Do not break untagged `traffic.pcap` / `soft_roce.pcap`.
 3. **More traces in `examples/`** — UDP, failed TCP handshake, truncated or malformed frames. Keep `*.pcap` gitignored; commit the log and a short note in `examples/README.md`. Capture with `tcpdump` or `scripts/soft_roce_veth.sh`.
-4. **Docs** — how to hang a custom DUT on the same AXI-Stream (`tdata`, `tkeep`, `tvalid`, `tready`, `tstart`, `tlast`, `tuser`). Typos and missing plusargs belong here too.
+4. **Docs** — typos, plusargs, architecture notes. Custom DUT attach is `hdl/nic_rx.sv` plus “Attach your NIC RX” in [Readme.md](Readme.md).
 
 IPv4 header checksum is in 0.4 (`CSUM mis=0`). Live sniff, host CSRs, and Ethernet FCS stay out unless a note in CHANGELOG says otherwise.
 
@@ -63,8 +63,8 @@ Keep gates green (`mis=0`, TCP `seq_ok`, RoCE `icrc ok`). Do not replace the DPI
 ## How to check
 
 ```bash
-make
-make FILTER='tcp port 5201'    # matched=100 skipped=0
+make NIC=1
+make NIC=1 FILTER='tcp port 5201'    # matched=100 skipped=0
 make FILTER='udp'              # streamed 0; skipped=1000
 make MAX_PACKETS=8             # compact TCP handshake log
 make PCAP=soft_roce.pcap MAX_PACKETS=8

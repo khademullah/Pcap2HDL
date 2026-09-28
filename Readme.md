@@ -10,7 +10,7 @@ Pcap2HDL streams `.pcap` files into Verilator through DPI-C (`libpcap`). Each ca
 
 Typical uses: early bring-up of FPGA or ASIC packet pipelines (classification, DPI, RoCE-aware paths) before silicon or a live Ethernet port is available.
 
-Current release: [0.3.0](CHANGELOG.md). Project site: [khademullah.github.io/Pcap2HDL](https://khademullah.github.io/Pcap2HDL/). Architecture (DPI-C, AXI-Stream, parser metadata): [architecture](https://khademullah.github.io/Pcap2HDL/architecture.html). Demo (16:9): [pcap2hdl-demo.mp4](https://khademullah.github.io/Pcap2HDL/pcap2hdl-demo.mp4).
+Current release: [0.3.0](CHANGELOG.md). Project site: [khademullah.github.io/Pcap2HDL](https://khademullah.github.io/Pcap2HDL/). Architecture (DPI-C, AXI-Stream, parser metadata): [architecture](https://khademullah.github.io/Pcap2HDL/architecture.html). NIC RX slave template: [nic](https://khademullah.github.io/Pcap2HDL/nic.html). Demo (16:9): [pcap2hdl-demo.mp4](https://khademullah.github.io/Pcap2HDL/pcap2hdl-demo.mp4).
 
 ## Requirements
 
@@ -29,7 +29,9 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 |------|------|
 | `Makefile` | Compile, run, waveforms, clean |
 | `hdl/` | SystemVerilog testbench and DUT |
-| `hdl/tb_pcap_dpi.sv` | DPI imports, AXI-Stream driver, plusargs |
+| `hdl/tb_pcap_dpi.sv` | DPI imports, AXI-Stream master, plusargs |
+| `hdl/pkt_snoop.sv` | Observer hierarchy (filter, parser, trackers, ICRC, RSS, csum) |
+| `hdl/nic_rx.sv` | Optional AXIS slave; compiled only with `make NIC=1` |
 | `hdl/pkt_size_filter.sv` | Frame length: runt / standard / jumbo |
 | `hdl/pkt_header_parser.sv` | L2–L4 parse; TCP; Soft-RoCE BTH |
 | `hdl/pkt_roce_tracker.sv` | RoCE PSN / MSG_DONE / ACK_OK |
@@ -49,20 +51,18 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 ## Data path
 
 ```
-.pcap  ->  libpcap BPF (optional FILTER)  ->  DPI-C  ->  AXI-Stream DUT
-                                                              ->  pkt_size_filter
-                                                              ->  pkt_header_parser
-                                                              ->  pkt_roce_tracker
-                                                         ->  pkt_tcp_tracker
-                                                         ->  pkt_roce_icrc
-                                                         ->  pkt_rss
-                                                         ->  pkt_ip_csum
-                                         optional dump.pcap <- libpcap
+.pcap -> libpcap -> DPI-C -> tb_pcap_dpi (AXIS master)
+                               ├─ pkt_snoop          [DUT observers]
+                               │    u_filter / u_parser / u_tcp / u_tracker
+                               │    u_icrc / u_rss / u_csum
+                               └─ u_nic_rx           [only if make NIC=1]
+                                  drives tready
+                            dump.pcap <- libpcap (optional)
 ```
 
 1. `open_pcap()` opens the file named by `+PCAP=`; `get_datalink()` reports the capture DLT. Optional `+FILTER=` compiles a libpcap BPF program; DPI-C applies `pcap_offline_filter` per frame so HDL only sees matches and the bench reports how many frames were skipped. Optional `+DUMP=` writes accepted AXI-Stream bytes back through `pcap_dump`.
 2. Packets are replayed up to `+MAX_PACKETS=` (default 100). After each `fetch_next_packet()`, `get_wire_len()` / `get_ts_sec()` / `get_ts_usec()` expose the pcap header (on-wire length vs stored `caplen`, capture timestamp).
-3. Bytes are updated on the clock negedge and sampled by the DUT on posedge when `tready` is high. With `AXIS_W=64`, up to eight bytes share a beat (`tkeep` marks valid lanes). `make BP=1` deasserts `tready` every other cycle; `make BP=2` uses `$urandom`. The master holds `tvalid` until the handshake.
+3. Bytes are updated on the clock negedge and sampled on posedge when `tvalid && tready`. Default `make` uses bench `BP` as `tready`. `make NIC=1` compiles `nic_rx`: it drives `s_tready` (credits, optional `NIC_PAUSE`) AND `ready_mask` (`BP`). With `AXIS_W=64`, up to eight bytes share a beat. The master holds `tvalid` until the handshake.
 4. `pkt_size_filter` counts `tkeep` bits and pulses `pkt_done` with length class.
 5. `pkt_header_parser` latches MAC, EtherType, IPv4 (TTL, total length), L4 ports, TCP sequence/flags, RoCE BTH, ARP (`0x0806`), and VXLAN (UDP/4789, inner Ethernet, VNI).
 6. `pkt_roce_tracker` follows Send First/Middle/Last PSN per `{src,dst,qp}` and matches the reverse-direction ACK.
@@ -70,16 +70,21 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 8. `pkt_roce_icrc` checks the last 4 bytes of a complete RoCEv2 frame (masked CRC32). Truncated captures are skipped.
 9. `pkt_rss` computes Microsoft Toeplitz RSS on the IPv4 4-tuple (queue = hash % 4). DPI-C hashes the same bytes into `tuser`; `mis` must stay 0.
 10. `pkt_ip_csum` folds the IPv4 header (RFC 1071) and compares with DPI-C (`CSUM mis=0`). `tuser_err` flags a C-side checksum fail without changing the RSS hash.
+11. `make NIC=1` instantiates `u_nic_rx` under `tb_pcap_dpi`. Without the flag, `nic_rx.sv` is not compiled and the log prints `[NIC] off`.
 
 ## Build and run
 
 ```bash
-make                              # traffic.pcap, 100 packets
+make                              # observers only; [NIC] off
+make NIC=1                        # compile nic_rx; [NIC] rx=… mis=0
+make NIC=1 BP=2
+make NIC=1 NIC_PAUSE=1            # slave toggles s_tready
 make PCAP=soft_roce.pcap          # Soft-RoCEv2
 make PCAP=soft_roce.pcap MAX_PACKETS=16
 make PACE=1                       # IFG from pcap timestamps (capped at 100 us)
 make BP=1                         # tready low every other cycle
-make BP=2                         # random tready
+make BP=2                         # extra random tready AND-ed with the slave
+make NIC_PAUSE=1                  # slave toggles its own tready (BP=0 still)
 python3 scripts/gen_pcap.py ci.pcap
 make PCAP=ci.pcap MAX_PACKETS=8 BP=2
 make AXIS_W=64                    # 8-byte AXI-Stream beats
@@ -91,7 +96,24 @@ make wave                         # GTKWave on simulation_trace.vcd
 make clean
 ```
 
-Traces are selected at runtime; a rebuild is not required when only `PCAP` or `MAX_PACKETS` changes. Changing `AXIS_W` rebuilds.
+Traces are selected at runtime; a rebuild is not required when only `PCAP` or `MAX_PACKETS` changes. Changing `AXIS_W` or `NIC` rebuilds.
+
+## Attach your NIC RX
+
+Build with `make NIC=1`. `hdl/nic_rx.sv` is compiled and `u_nic_rx` is the slave. Observers live under `u_snoop`.
+
+`hdl/nic_rx.sv` is the template. It **produces** `s_tready`.
+
+1. Copy `nic_rx` or replace `u_nic_rx` in `hdl/tb_pcap_dpi.sv` (inside `` `ifdef EN_NIC ``).
+2. Keep this port list: `clk`, `rst_n`, `s_tdata`, `s_tkeep`, `s_tvalid`, `s_tready` (output), `s_tstart`, `s_tlast`, `s_tuser`, `s_tuser_err`.
+3. Sample only when `s_tvalid && s_tready`. `tstart` is SOP (not in AMBA); `tlast` is EOP.
+4. Leave `ready_mask` connected to the bench `BP` generator, or tie it to 1 if your core is the only ready source. Do not AND `BP` only outside the slave while still sampling on unmasked `s_tready` — that double-counts beats.
+5. Keep `make NIC=1` (or add your file next to `nic_rx.sv` in the `ifeq ($(NIC),1)` block).
+6. Gate: `[NIC] rx=` equals streamed packets, `drop=0`, `byte_mis=0`, `mis=0`.
+
+`NIC_PAUSE=1` (with `NIC=1`) is a slave-side stall inside `nic_rx`: each clock toggles `bubble`, so `s_tready` is 0 every other cycle even if the FIFO is not full (`s_tready = rst_n && ready_mask && !bubble && !almost_full`). That is not `BP`: `BP=1`/`BP=2` is bench `ready_mask`. Default `NIC_PAUSE=0` leaves `bubble` at 0. Packet counts and `[NIC] mis=0` should still match `NIC_PAUSE=0` if the slave only advances on `s_tvalid && s_tready`. Your RX can tie `pause_en` off. Details: [nic.html](https://khademullah.github.io/Pcap2HDL/nic.html#pause).
+
+This is an ingress example (credits + frame length), not a 400GbE MAC. Diagrams: [docs/nic.html](https://khademullah.github.io/Pcap2HDL/nic.html).
 
 ## Example: TCP (`traffic.pcap`)
 
@@ -224,7 +246,7 @@ Capture a new file with `sudo ./scripts/soft_roce_veth.sh setup` then `demo` (`d
 - RSS: Toeplitz 4-tuple in C and HDL (`tuser`); four queues, `mis=0`
 - IPv4 checksum: RFC 1071 in C and HDL (`CSUM mis=0`); `tuser_err` is fail sideband
 - ARP (`0x0806`) and VXLAN (UDP/4789, VNI, inner Ethernet)
-- Replay: optional `+PACE=1` IFG from pcap timestamps (capped); `AXIS_W=64` eight-byte beats; `tready` handshake (`+BP=1` 50%, `+BP=2` random); `DUMP=` writes the bus back to a pcap; `FILTER=` is libpcap BPF (`pcap_offline_filter`) with `matched` / `skipped` counts
+- Replay: optional `+PACE=1` IFG from pcap timestamps (capped); `AXIS_W=64` eight-byte beats; slave `tready` from `nic_rx` AND `+BP=1`/`+BP=2`; `+NIC_PAUSE=1` stalls inside the slave; `DUMP=` writes the bus back to a pcap; `FILTER=` is libpcap BPF (`pcap_offline_filter`) with `matched` / `skipped` counts
 - Coverage print `[COV]` size / TCP flags / RoCE opcodes. CI: `.github/workflows/ci.yml` + `scripts/gen_pcap.py`
 
 Still parked: IPv6, VLAN. See [CHANGELOG.md](CHANGELOG.md). How to contribute, and why the parked items are good first PRs: [CONTRIBUTING.md](CONTRIBUTING.md).

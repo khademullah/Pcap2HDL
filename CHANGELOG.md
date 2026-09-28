@@ -15,12 +15,13 @@ C vs HDL IPv4 checksum, ARP and VXLAN classify, random `tready`, synthetic pcap 
 
 - `python3 scripts/gen_pcap.py ci.pcap` (stdlib; ARP + TCP SYN + VXLAN + runt).
 - `.github/workflows/ci.yml`: generate that file, `make PCAP=ci.pcap BP=2`.
+- `nic_rx`: example AXI-Stream slave. Compiled only with `make NIC=1` (`-DEN_NIC`). Observers are under `pkt_snoop` (`u_snoop`). Gate `[NIC] ... mis=0`.
 
 ### How to check
 
 ```bash
 python3 scripts/gen_pcap.py ci.pcap
-make PCAP=ci.pcap MAX_PACKETS=8 BP=2   # arp=1 vxlan=1 CSUM mis=0 streamed 4
+make NIC=1 PCAP=ci.pcap MAX_PACKETS=8 BP=2   # arp=1 vxlan=1 CSUM mis=0 streamed 4; [NIC] rx=4 mis=0
 make MAX_PACKETS=8                    # ipv4=8 tcp=8 hs=1 seq_ok=5 CSUM ok=8 mis=0
 make BP=2 MAX_PACKETS=8               # same TCP gate as BP=0
 ```

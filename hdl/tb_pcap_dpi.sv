@@ -33,7 +33,9 @@ module tb_pcap_dpi #(
     reg [DATA_W-1:0]   tdata;
     reg [KEEP_W-1:0]   tkeep;
     reg                tvalid;
-    reg                tready;
+    reg                bp_ready;
+    wire               nic_tready;
+    wire               tready;
     reg                tstart;
     reg                tlast;
     reg [31:0]         tuser;
@@ -112,6 +114,13 @@ module tb_pcap_dpi #(
     wire        csum_skip;
     wire [15:0] csum;
 
+    wire        nic_pkt_valid;
+    wire [31:0] nic_bytes;
+    wire [31:0] nic_hash;
+    wire        nic_err;
+    wire        nic_drop;
+    wire [15:0] nic_occ;
+
     int pkt_len;
     int pkt_wire;
     int dlt;
@@ -131,6 +140,9 @@ module tb_pcap_dpi #(
     int n_rss_q0, n_rss_q1, n_rss_q2, n_rss_q3, n_rss_mis, n_rss_skip;
     int n_arp, n_vxlan;
     int n_csum_ok, n_csum_err, n_csum_skip, n_csum_mis;
+    int n_nic, n_nic_drop, n_nic_byte_mis, n_nic_err;
+    int nic_pause_arg;
+    int nic_occ_max;
     int n_cov_syn, n_cov_ack, n_cov_fin, n_cov_rst;
     int n_cov_op_send, n_cov_op_ack;
     int unsigned c_rss_hash;
@@ -185,11 +197,9 @@ module tb_pcap_dpi #(
             tcp_flagstr = tcp_flagstr.substr(0, tcp_flagstr.len() - 2);
     endfunction
 
-    pkt_size_filter #(
-        .DATA_W(DATA_W),
-        .JUMBO_THRESH(1500),
-        .MIN_FRAME(64)
-    ) u_filter (
+    pkt_snoop #(
+        .DATA_W(DATA_W)
+    ) u_snoop (
         .clk(clk),
         .rst_n(rst_n),
         .tdata(tdata),
@@ -202,29 +212,16 @@ module tb_pcap_dpi #(
         .pkt_bytes(pkt_bytes),
         .is_runt(is_runt),
         .is_standard(is_standard),
-        .is_jumbo(is_jumbo)
-    );
-
-    pkt_header_parser #(
-        .DATA_W(DATA_W)
-    ) u_parser (
-        .clk(clk),
-        .rst_n(rst_n),
-        .tdata(tdata),
-        .tkeep(tkeep),
-        .tvalid(tvalid),
-        .tready(tready),
-        .tstart(tstart),
-        .tlast(tlast),
+        .is_jumbo(is_jumbo),
         .hdr_valid(hdr_valid),
-        .is_ipv4(hdr_is_ipv4),
-        .is_non_ipv4(hdr_is_non_ipv4),
-        .is_truncated(hdr_is_truncated),
-        .is_tcp(hdr_is_tcp),
-        .is_udp(hdr_is_udp),
-        .is_roce(hdr_is_roce),
-        .is_arp(hdr_is_arp),
-        .is_vxlan(hdr_is_vxlan),
+        .hdr_is_ipv4(hdr_is_ipv4),
+        .hdr_is_non_ipv4(hdr_is_non_ipv4),
+        .hdr_is_truncated(hdr_is_truncated),
+        .hdr_is_tcp(hdr_is_tcp),
+        .hdr_is_udp(hdr_is_udp),
+        .hdr_is_roce(hdr_is_roce),
+        .hdr_is_arp(hdr_is_arp),
+        .hdr_is_vxlan(hdr_is_vxlan),
         .vxlan_vni(vxlan_vni),
         .dst_mac(dst_mac),
         .src_mac(src_mac),
@@ -238,114 +235,40 @@ module tb_pcap_dpi #(
         .src_port(src_port),
         .dst_port(dst_port),
         .tcp_seq(tcp_seq),
-        .tcp_ack(tcp_ackn),
+        .tcp_ackn(tcp_ackn),
         .tcp_flags(tcp_flags),
         .tcp_plen(tcp_plen),
         .bth_opcode(bth_opcode),
         .bth_pkey(bth_pkey),
         .bth_ackreq(bth_ackreq),
         .dest_qp(dest_qp),
-        .bth_psn(bth_psn)
-    );
-
-    pkt_roce_tracker #(
-        .NUM_SESS(4)
-    ) u_tracker (
-        .clk(clk),
-        .rst_n(rst_n),
-        .hdr_valid(hdr_valid),
-        .is_roce(hdr_is_roce),
-        .src_ip(src_ip),
-        .dst_ip(dst_ip),
-        .opcode(bth_opcode),
-        .dest_qp(dest_qp),
-        .psn(bth_psn),
-        .evt_valid(trk_evt),
-        .psn_err(trk_psn_err),
-        .op_err(trk_op_err),
-        .sess_full(trk_sess_full),
-        .msg_done(trk_msg_done),
-        .ack_ok(trk_ack_ok),
-        .psn_gap(trk_psn_gap)
-    );
-
-    pkt_tcp_tracker #(
-        .NUM_SESS(4)
-    ) u_tcp (
-        .clk(clk),
-        .rst_n(rst_n),
-        .hdr_valid(hdr_valid),
-        .is_tcp(hdr_is_tcp),
-        .src_ip(src_ip),
-        .dst_ip(dst_ip),
-        .src_port(src_port),
-        .dst_port(dst_port),
-        .seq(tcp_seq),
-        .ack(tcp_ackn),
-        .flags(tcp_flags),
-        .plen(tcp_plen),
-        .evt_valid(tcp_evt),
-        .syn_ok(tcp_syn_ok),
-        .synack_ok(tcp_synack_ok),
-        .hs_done(tcp_hs_done),
-        .fin_ok(tcp_fin_ok),
-        .rst_ok(tcp_rst_ok),
-        .seq_ok(tcp_seq_ok),
-        .seq_err(tcp_seq_err),
-        .op_err(tcp_op_err),
-        .sess_full(tcp_sess_full)
-    );
-
-    pkt_roce_icrc #(
-        .DATA_W(DATA_W)
-    ) u_icrc (
-        .clk(clk),
-        .rst_n(rst_n),
-        .tdata(tdata),
-        .tkeep(tkeep),
-        .tvalid(tvalid),
-        .tready(tready),
-        .tstart(tstart),
-        .tlast(tlast),
-        .is_roce(hdr_is_roce),
-        .ip_tot_len(ip_tot_len),
+        .bth_psn(bth_psn),
+        .trk_evt(trk_evt),
+        .trk_psn_err(trk_psn_err),
+        .trk_op_err(trk_op_err),
+        .trk_sess_full(trk_sess_full),
+        .trk_msg_done(trk_msg_done),
+        .trk_ack_ok(trk_ack_ok),
+        .trk_psn_gap(trk_psn_gap),
+        .tcp_evt(tcp_evt),
+        .tcp_syn_ok(tcp_syn_ok),
+        .tcp_synack_ok(tcp_synack_ok),
+        .tcp_hs_done(tcp_hs_done),
+        .tcp_fin_ok(tcp_fin_ok),
+        .tcp_rst_ok(tcp_rst_ok),
+        .tcp_seq_ok(tcp_seq_ok),
+        .tcp_seq_err(tcp_seq_err),
+        .tcp_op_err(tcp_op_err),
+        .tcp_sess_full(tcp_sess_full),
+        .rss_valid(rss_valid),
+        .rss_skip(rss_skip),
+        .rss_hash(rss_hash),
+        .rss_qid(rss_qid),
         .icrc_valid(icrc_valid),
         .icrc(icrc),
         .icrc_ok(icrc_ok),
         .icrc_err(icrc_err),
-        .icrc_skip(icrc_skip)
-    );
-
-    pkt_rss #(
-        .NUM_Q(4)
-    ) u_rss (
-        .clk(clk),
-        .rst_n(rst_n),
-        .hdr_valid(hdr_valid),
-        .is_ipv4(hdr_is_ipv4),
-        .is_truncated(hdr_is_truncated),
-        .ip_proto(ip_proto),
-        .src_ip(src_ip),
-        .dst_ip(dst_ip),
-        .src_port(src_port),
-        .dst_port(dst_port),
-        .rss_valid(rss_valid),
-        .rss_skip(rss_skip),
-        .rss_hash(rss_hash),
-        .rss_qid(rss_qid)
-    );
-
-    pkt_ip_csum #(
-        .DATA_W(DATA_W)
-    ) u_csum (
-        .clk(clk),
-        .rst_n(rst_n),
-        .tdata(tdata),
-        .tkeep(tkeep),
-        .tvalid(tvalid),
-        .tready(tready),
-        .tstart(tstart),
-        .tlast(tlast),
+        .icrc_skip(icrc_skip),
         .csum_valid(csum_valid),
         .csum_ok(csum_ok),
         .csum_err(csum_err),
@@ -353,17 +276,53 @@ module tb_pcap_dpi #(
         .csum(csum)
     );
 
+`ifdef EN_NIC
+    nic_rx #(
+        .DATA_W(DATA_W),
+        .DEPTH(16)
+    ) u_nic_rx (
+        .clk(clk),
+        .rst_n(rst_n),
+        .s_tdata(tdata),
+        .s_tkeep(tkeep),
+        .s_tvalid(tvalid),
+        .s_tready(nic_tready),
+        .s_tstart(tstart),
+        .s_tlast(tlast),
+        .s_tuser(tuser),
+        .s_tuser_err(tuser_err),
+        .ready_mask(bp_ready),
+        .pause_en(nic_pause_arg != 0),
+        .rx_pkt_valid(nic_pkt_valid),
+        .rx_bytes(nic_bytes),
+        .rx_hash(nic_hash),
+        .rx_err(nic_err),
+        .rx_drop(nic_drop),
+        .rx_occ(nic_occ)
+    );
+    assign tready = nic_tready;
+`else
+    assign nic_tready    = bp_ready;
+    assign tready        = bp_ready;
+    assign nic_pkt_valid = 1'b0;
+    assign nic_bytes     = 32'd0;
+    assign nic_hash      = 32'd0;
+    assign nic_err       = 1'b0;
+    assign nic_drop      = 1'b0;
+    assign nic_occ       = 16'd0;
+`endif
+
     always #5 clk = ~clk;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n)
-            tready <= 1'b1;
+            bp_ready <= 1'b1;
         else if (bp_arg == 1)
-            tready <= ~tready;
+            bp_ready <= ~bp_ready;
         else if (bp_arg == 2)
-            tready <= 1'($urandom_range(0, 1));
+            bp_ready <= 1'($urandom_range(0, 1));
         else
-            tready <= 1'b1;
+            bp_ready <= 1'b1;
     end
 
     always @(posedge clk) begin
@@ -382,6 +341,22 @@ module tb_pcap_dpi #(
                                    "STANDARD");
         end
     end
+
+`ifdef EN_NIC
+    always @(posedge clk) begin
+        if (rst_n && (32'(nic_occ) > nic_occ_max))
+            nic_occ_max = 32'(nic_occ);
+        if (rst_n && nic_drop)
+            n_nic_drop = n_nic_drop + 1;
+        if (rst_n && nic_pkt_valid) begin
+            n_nic = n_nic + 1;
+            if (nic_err)
+                n_nic_err = n_nic_err + 1;
+            if (!pkt_done || (nic_bytes != pkt_bytes))
+                n_nic_byte_mis = n_nic_byte_mis + 1;
+        end
+    end
+`endif
 
     always @(posedge clk) begin
         if (rst_n && is_len_mismatch) begin
@@ -611,6 +586,12 @@ module tb_pcap_dpi #(
         n_csum_err = 0;
         n_csum_skip = 0;
         n_csum_mis = 0;
+        n_nic = 0;
+        n_nic_drop = 0;
+        n_nic_byte_mis = 0;
+        n_nic_err = 0;
+        nic_pause_arg = 0;
+        nic_occ_max = 0;
         n_cov_syn = 0;
         n_cov_ack = 0;
         n_cov_fin = 0;
@@ -643,6 +624,7 @@ module tb_pcap_dpi #(
         void'($value$plusargs("PACE=%d", pace_arg));
         void'($value$plusargs("PACE_MAX_US=%d", pace_max_us));
         void'($value$plusargs("BP=%d", bp_arg));
+        void'($value$plusargs("NIC_PAUSE=%d", nic_pause_arg));
         pace = (pace_arg != 0);
 
         #20;
@@ -673,11 +655,12 @@ module tb_pcap_dpi #(
         end
         if (DATA_W != 8)
             $display("[SV] AXIS DATA_W=%0d (%0d bytes/beat)", DATA_W, KEEP_W);
-        $display("[SV] Streaming up to %0d packets%s%s%s",
+        $display("[SV] Streaming up to %0d packets%s%s%s%s",
                  max_packets,
                  pace ? $sformatf(" (PACE=1, IFG cap %0d us)", pace_max_us) : "",
-                 (bp_arg == 1) ? " (BP=1, tready 50%)" :
-                 (bp_arg == 2) ? " (BP=2, random tready)" : "",
+                 (bp_arg == 1) ? " (BP=1, extra tready 50%)" :
+                 (bp_arg == 2) ? " (BP=2, extra random tready)" : "",
+                 (nic_pause_arg != 0) ? " NIC_PAUSE=1" : "",
                  (filter_arg.len() != 0) ? $sformatf(" FILTER=%s", filter_arg) : "");
 
         while (1) begin
@@ -785,6 +768,13 @@ module tb_pcap_dpi #(
                  n_csum_ok, n_csum_err, n_csum_skip, n_csum_mis);
         $display("[DUT] RSS     q0=%0d  q1=%0d  q2=%0d  q3=%0d  mis=%0d  skip=%0d",
                  n_rss_q0, n_rss_q1, n_rss_q2, n_rss_q3, n_rss_mis, n_rss_skip);
+`ifdef EN_NIC
+        $display("[NIC] rx=%0d  drop=%0d  byte_mis=%0d  csum_side=%0d  occ_max=%0d  mis=%0d",
+                 n_nic, n_nic_drop, n_nic_byte_mis, n_nic_err, nic_occ_max,
+                 (n_nic != packet_count) || (n_nic_drop != 0) || (n_nic_byte_mis != 0));
+`else
+        $display("[NIC] off  (rebuild with make NIC=1)");
+`endif
         $display("[COV] size    runt=%0d  standard=%0d  jumbo=%0d  tcp SYN=%0d ACK=%0d FIN=%0d RST=%0d  roce send=%0d ack=%0d",
                  n_runt, n_standard, n_jumbo, n_cov_syn, n_cov_ack, n_cov_fin, n_cov_rst,
                  n_cov_op_send, n_cov_op_ack);

@@ -20,7 +20,8 @@
       </a>
       <nav>
         <a href="index.html">Home</a>
-        <a class="nav-current" href="architecture.html" aria-current="page">Architecture</a>
+        <a href="architecture.html" class="nav-current" aria-current="page">Architecture</a>
+        <a class="hide-sm" href="nic.html">NIC RX</a>
         <a class="hide-sm" href="index.html#dut">DUT</a>
         <a class="hide-sm" href="index.html#build">Build</a>
         <a class="btn btn-solid" href="https://github.com/khademullah/Pcap2HDL">GitHub</a>
@@ -35,8 +36,10 @@
       <h1>From pcap to DUT</h1>
       <p class="lede">
         The capture file is never opened in SystemVerilog. libpcap reads it in C.
-        The testbench is an AXI-Stream master. DUT modules snoop the same beats;
-        they do not pass frames to one another. Trackers and RSS sit on
+        The testbench is an AXI-Stream master. With <code>make NIC=1</code>,
+        <code>nic_rx</code> is the AXIS slave (it drives <code>tready</code>).
+        Other DUT modules snoop the same beats; they do not pass frames to one another.
+        Trackers and RSS sit on
         <strong>parser metadata</strong> (<code>hdr_valid</code> and decoded fields), not on AXIS.
       </p>
     </div>
@@ -49,6 +52,7 @@
       <a href="#capture">Capture and DPI-C</a>
       <a href="#axis">AXI-Stream</a>
       <a href="#beat">Beat</a>
+      <a href="#nic">Attach a NIC RX</a>
       <a href="#snoop">Streaming DUTs</a>
       <a href="#score">C vs HDL</a>
       <a href="#hdr">Parser metadata</a>
@@ -66,8 +70,11 @@
           same Ethernet bytes a MAC would, with simulation time frozen.
           Default <code>DATA_W</code> is 8 (one byte per cycle);
           <code>make AXIS_W=64</code> packs eight bytes with <code>tkeep</code>.
-          A beat is legal only when <code>tvalid &amp;&amp; tready</code>
-          (<code>BP=1</code> / <code>BP=2</code> stall the slave).
+          A beat is legal only when <code>tvalid &amp;&amp; tready</code>.
+          Default <code>make</code> uses bench <code>BP</code> as <code>tready</code>.
+          <code>make NIC=1</code> lets <code>nic_rx</code> drive ready (with <code>BP</code>
+          as <code>ready_mask</code>). Template diagrams:
+          <a href="nic.html">NIC RX</a>.
         </p>
         <p>
           The figure is the whole design. Top to bottom is capture → C → testbench → bus.
@@ -224,7 +231,7 @@
             <tr><td>tdata</td><td>DATA_W</td><td>in</td><td>Payload; little-endian lanes when DATA_W=64</td></tr>
             <tr><td>tkeep</td><td>DATA_W/8</td><td>in</td><td>Valid bytes in the beat; all 1s except a short last beat</td></tr>
             <tr><td>tvalid</td><td>1</td><td>in</td><td>Master has a beat</td></tr>
-            <tr><td>tready</td><td>1</td><td>in*</td><td>Slave accepts. TB drives it; DUT must not sample without it</td></tr>
+            <tr><td>tready</td><td>1</td><td>out*</td><td>From <code>nic_rx</code> (<code>ready_mask</code> is bench <code>BP</code>)</td></tr>
             <tr><td>tstart</td><td>1</td><td>in</td><td>First beat of the frame (not in AMBA AXIS; explicit here)</td></tr>
             <tr><td>tlast</td><td>1</td><td>in</td><td>Last beat of the frame</td></tr>
             <tr><td>tuser</td><td>32</td><td>in</td><td>C RSS hash when valid; for a custom NIC DUT</td></tr>
@@ -232,10 +239,29 @@
           </tbody>
         </table>
         <p class="note">
-          *<code>tready</code> is produced by the testbench, not by the DUT modules.
-          The DUT is a <strong>slave observer</strong>: it may only advance on fire
-          (<code>tvalid &amp;&amp; tready</code>). Confirm that in the wave before trusting parse.
+          *Observers input <code>tready</code>. The NIC RX template outputs
+          <code>s_tready</code>, which already includes bench <code>BP</code> as
+          <code>ready_mask</code>. Confirm fire in the wave before trusting parse.
         </p>
+      </section>
+
+      <section id="nic">
+        <h2>Attach a NIC RX</h2>
+        <p>
+          Hierarchy, AXIS pin template, and <code>make NIC=1</code> are on the
+          <a href="nic.html">NIC RX</a> page. <code>hdl/nic_rx.sv</code> is the
+          in-tree slave; observers stay under <code>u_snoop</code>.
+          Without the flag the log prints <code>[NIC] off</code>.
+        </p>
+        <p>
+          Gate with the slave compiled:
+          <code>[NIC] rx=</code> equals streamed packets,
+          <code>drop=0</code>, <code>byte_mis=0</code>, <code>mis=0</code>.
+        </p>
+        <div class="cta gap">
+          <a class="btn btn-navy" href="nic.html">NIC RX template</a>
+          <a class="btn btn-line" href="https://github.com/khademullah/Pcap2HDL/blob/main/hdl/nic_rx.sv">nic_rx.sv</a>
+        </div>
       </section>
 
       <section id="snoop">
@@ -399,7 +425,8 @@
             <tr><th>Path</th><th>Role</th></tr>
           </thead>
           <tbody>
-            <tr><td>hdl/tb_pcap_dpi.sv</td><td>DPI imports, AXIS master, plusargs, logs, instantiations</td></tr>
+            <tr><td>hdl/tb_pcap_dpi.sv</td><td>DPI imports, AXIS master, plusargs, logs</td></tr>
+            <tr><td>hdl/pkt_snoop.sv</td><td>Observer hierarchy under <code>u_snoop</code></td></tr>
             <tr><td>hdl/pkt_size_filter.sv</td><td>Runt / standard / jumbo from tkeep popcount</td></tr>
             <tr><td>hdl/pkt_header_parser.sv</td><td>Streaming L2–L4, ARP, VXLAN, Soft-RoCEv2 BTH</td></tr>
             <tr><td>hdl/pkt_tcp_tracker.sv</td><td>Handshake and next-seq CAM</td></tr>
@@ -407,12 +434,13 @@
             <tr><td>hdl/pkt_roce_icrc.sv</td><td>Masked CRC32 vs last 4 bytes</td></tr>
             <tr><td>hdl/pkt_rss.sv</td><td>Toeplitz; same key as C</td></tr>
             <tr><td>hdl/pkt_ip_csum.sv</td><td>IPv4 header checksum; same fold as C</td></tr>
+            <tr><td>hdl/nic_rx.sv</td><td>AXIS slave; compiled only with <code>make NIC=1</code></td></tr>
             <tr><td>dpi/pcap_reader.c</td><td>libpcap, BPF, dump, C RSS and csum</td></tr>
           </tbody>
         </table>
         <div class="cta gap">
           <a class="btn btn-navy" href="https://github.com/khademullah/Pcap2HDL/blob/main/hdl/tb_pcap_dpi.sv">tb_pcap_dpi.sv</a>
-          <a class="btn btn-line" href="index.html">Project site</a>
+          <a class="btn btn-line" href="nic.html">NIC RX</a>
           <a class="btn btn-line" href="https://github.com/khademullah/Pcap2HDL/blob/main/CONTRIBUTING.md">Contributing</a>
         </div>
       </section>
@@ -421,7 +449,7 @@
 
   <footer class="foot">
     <div class="wrap foot-inner">
-      <span>Pcap2HDL · MIT · <a href="index.html">Home</a> · Architecture</span>
+      <span>Pcap2HDL · MIT · <a href="index.html">Home</a> · Architecture · <a href="nic.html">NIC RX</a></span>
       <span>No capture files are published on this site.</span>
     </div>
   </footer>

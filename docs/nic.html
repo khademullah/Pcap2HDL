@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NIC RX template — Pcap2HDL</title>
+  <meta name="description" content="How to compile nic_rx with make NIC=1, the instance hierarchy under tb_pcap_dpi, and the AXIS slave pin template.">
+  <link rel="icon" href="pcap2hdl-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap top-inner">
+      <a class="brand" href="index.html">
+        <img src="pcap2hdl-icon.png" width="36" height="36" alt="">
+        Pcap2HDL
+      </a>
+      <nav>
+        <a href="index.html">Home</a>
+        <a href="architecture.html">Architecture</a>
+        <a class="nav-current" href="nic.html" aria-current="page">NIC RX</a>
+        <a class="hide-sm" href="index.html#build">Build</a>
+        <a class="btn btn-solid" href="https://github.com/khademullah/Pcap2HDL">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="page-hero" id="top">
+    <div class="wrap">
+      <p class="crumb"><a href="index.html">Home</a> / <a href="architecture.html">Architecture</a> / NIC RX</p>
+      <p class="kicker">Attach template</p>
+      <h1>NIC RX as an AXI-Stream slave</h1>
+      <p class="lede">
+        Default <code>make</code> does not compile the NIC. <code>make NIC=1</code>
+        adds <code>hdl/nic_rx.sv</code> as <code>u_nic_rx</code> and prints
+        <code>[NIC]</code> totals. Observers stay under <code>u_snoop</code>.
+        Swap <code>u_nic_rx</code> for your RX; keep the <code>s_*</code> pins.
+      </p>
+    </div>
+  </section>
+
+  <div class="doc-layout wrap">
+    <aside class="doc-toc" aria-label="On this page">
+      <p>On this page</p>
+      <a href="#hier">Hierarchy</a>
+      <a href="#inst">After instantiation</a>
+      <a href="#template">AXIS pin template</a>
+      <a href="#inside">What nic_rx does</a>
+      <a href="#pause">NIC_PAUSE=1</a>
+      <a href="#build">Build and gate</a>
+      <a href="#swap">Swap your RX</a>
+    </aside>
+
+    <article class="doc">
+      <section id="hier">
+        <h2>Hierarchy</h2>
+        <p>
+          The testbench is the AXI-Stream master. Packet checks live in one wrapper,
+          <code>pkt_snoop</code> (<code>u_snoop</code>). That wrapper does not drive
+          <code>tready</code>. With <code>NIC=1</code>, <code>u_nic_rx</code> is the
+          slave: it produces <code>s_tready</code> on the same wires the snoops sample.
+          Without the flag, the bench drives <code>tready</code> from <code>BP</code> only.
+        </p>
+        <figure class="flow-chart" aria-label="Instance hierarchy: tb_pcap_dpi, u_snoop observers, optional u_nic_rx slave">
+          <svg class="flow-svg" viewBox="0 0 960 520" role="img" xmlns="http://www.w3.org/2000/svg">
+            <title>tb_pcap_dpi instance hierarchy</title>
+            <defs>
+              <marker id="narr" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto">
+                <path d="M0 0 L10 4 L0 8 Z" fill="#2f8f86"/>
+              </marker>
+            </defs>
+            <g fill="#0c2340" stroke="#2f8f86" stroke-width="1.4">
+              <rect x="230" y="12" width="500" height="62" rx="8"/>
+              <rect x="40" y="160" width="420" height="70" rx="8"/>
+              <rect x="500" y="160" width="420" height="70" rx="8"/>
+              <rect x="40" y="320" width="120" height="52" rx="6"/>
+              <rect x="172" y="320" width="120" height="52" rx="6"/>
+              <rect x="304" y="320" width="156" height="52" rx="6"/>
+              <rect x="40" y="400" width="120" height="52" rx="6"/>
+              <rect x="172" y="400" width="120" height="52" rx="6"/>
+              <rect x="304" y="400" width="156" height="52" rx="6"/>
+              <rect x="560" y="330" width="300" height="110" rx="8"/>
+            </g>
+            <g fill="#e8f0f7" text-anchor="middle" font-family="Source Sans 3, Segoe UI, Helvetica, sans-serif">
+              <text x="480" y="38" font-size="15" font-weight="700">tb_pcap_dpi</text>
+              <text x="480" y="58" font-size="12" fill="#9bb0c4">AXIS master · DPI-C · plusargs</text>
+              <text x="250" y="190" font-size="15" font-weight="700">u_snoop  (pkt_snoop)</text>
+              <text x="250" y="210" font-size="12" fill="#9bb0c4">[DUT] observers · tready is an input</text>
+              <text x="710" y="190" font-size="15" font-weight="700">u_nic_rx  (nic_rx)</text>
+              <text x="710" y="210" font-size="12" fill="#9bb0c4">compile only with make NIC=1</text>
+              <text x="100" y="350" font-size="12" font-weight="700">u_filter</text>
+              <text x="232" y="350" font-size="12" font-weight="700">u_parser</text>
+              <text x="382" y="350" font-size="12" font-weight="700">u_tcp / u_tracker</text>
+              <text x="100" y="430" font-size="12" font-weight="700">u_icrc</text>
+              <text x="232" y="430" font-size="12" font-weight="700">u_rss</text>
+              <text x="382" y="430" font-size="12" font-weight="700">u_csum</text>
+              <text x="710" y="372" font-size="13" font-weight="700">s_tready out</text>
+              <text x="710" y="394" font-size="12" fill="#9bb0c4">ready_mask = BP</text>
+              <text x="710" y="414" font-size="12" fill="#9bb0c4">replace this instance</text>
+            </g>
+            <g fill="none" stroke="#2f8f86" stroke-width="2" marker-end="url(#narr)">
+              <path d="M400 74 V150"/>
+              <path d="M560 74 V150"/>
+              <path d="M250 230 V312"/>
+              <path d="M710 230 V322"/>
+            </g>
+            <g fill="#2f8f86" text-anchor="middle" font-family="IBM Plex Mono, ui-monospace, Menlo, sans-serif" font-size="11">
+              <text x="250" y="128">always compiled</text>
+              <text x="710" y="128">ifdef EN_NIC</text>
+            </g>
+          </svg>
+          <figcaption>
+            Labels sit on the modules, not on the arrows.
+            <code>u_snoop</code> is not a packet FIFO: children snoop the same AXIS.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section id="inst">
+        <h2>After instantiation</h2>
+        <p>
+          What exists after <code>make NIC=1</code> instantiates.
+        </p>
+        <h3 class="doc-h3">Instance tree (GTKWave SST)</h3>
+        <figure class="flow-chart" aria-label="Instance tree after make NIC=1">
+          <svg class="flow-svg" viewBox="0 0 960 360" role="img" xmlns="http://www.w3.org/2000/svg">
+            <title>tb_pcap_dpi instance tree</title>
+            <defs>
+              <marker id="tarr" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto">
+                <path d="M0 0 L10 4 L0 8 Z" fill="#2f8f86"/>
+              </marker>
+            </defs>
+            <g fill="#0c2340" stroke="#2f8f86" stroke-width="1.4">
+              <rect x="355" y="8" width="250" height="58" rx="8"/>
+              <rect x="140" y="120" width="220" height="58" rx="8"/>
+              <rect x="600" y="120" width="220" height="58" rx="8"/>
+              <rect x="8" y="270" width="120" height="52" rx="6"/>
+              <rect x="142" y="270" width="120" height="52" rx="6"/>
+              <rect x="276" y="270" width="120" height="52" rx="6"/>
+              <rect x="410" y="270" width="120" height="52" rx="6"/>
+              <rect x="544" y="270" width="120" height="52" rx="6"/>
+              <rect x="678" y="270" width="120" height="52" rx="6"/>
+              <rect x="812" y="270" width="140" height="52" rx="6"/>
+            </g>
+            <g fill="#e8f0f7" text-anchor="middle" font-family="Source Sans 3, Segoe UI, Helvetica, sans-serif">
+              <text x="480" y="32" font-size="14" font-weight="700">tb_pcap_dpi</text>
+              <text x="480" y="50" font-size="11" fill="#9bb0c4">AXIS master + DPI-C</text>
+              <text x="250" y="144" font-size="14" font-weight="700">u_nic_rx</text>
+              <text x="250" y="162" font-size="11" fill="#9bb0c4">nic_rx</text>
+              <text x="710" y="144" font-size="14" font-weight="700">u_snoop</text>
+              <text x="710" y="162" font-size="11" fill="#9bb0c4">pkt_snoop</text>
+              <text x="68" y="301" font-size="12" font-weight="700">u_filter</text>
+              <text x="202" y="301" font-size="12" font-weight="700">u_parser</text>
+              <text x="336" y="301" font-size="12" font-weight="700">u_tcp</text>
+              <text x="470" y="301" font-size="12" font-weight="700">u_tracker</text>
+              <text x="604" y="301" font-size="12" font-weight="700">u_icrc</text>
+              <text x="738" y="301" font-size="12" font-weight="700">u_rss</text>
+              <text x="882" y="301" font-size="12" font-weight="700">u_csum</text>
+            </g>
+            <g fill="none" stroke="#2f8f86" stroke-width="2" marker-end="url(#tarr)">
+              <path d="M420 66 V112 H250 V118"/>
+              <path d="M540 66 V112 H710 V118"/>
+              <path d="M710 178 V250 H68 V268"/>
+              <path d="M710 250 H202 V268"/>
+              <path d="M710 250 H336 V268"/>
+              <path d="M710 250 H470 V268"/>
+              <path d="M710 250 H604 V268"/>
+              <path d="M710 250 H738 V268"/>
+              <path d="M710 250 H882 V268"/>
+            </g>
+          </svg>
+        </figure>
+        <h3 class="doc-h3">Same AXIS after the port map (not a chain)</h3>
+        <figure class="flow-chart" aria-label="Shared AXI-Stream after port map">
+          <svg class="flow-svg" viewBox="0 0 960 280" role="img" xmlns="http://www.w3.org/2000/svg">
+            <title>Shared AXIS after port map</title>
+            <defs>
+              <marker id="barr" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto">
+                <path d="M0 0 L10 4 L0 8 Z" fill="#2f8f86"/>
+              </marker>
+            </defs>
+            <g fill="#0c2340" stroke="#2f8f86" stroke-width="1.4">
+              <rect x="16" y="88" width="220" height="100" rx="8"/>
+              <rect x="300" y="88" width="250" height="100" rx="8"/>
+              <rect x="640" y="16" width="300" height="100" rx="8"/>
+              <rect x="640" y="160" width="300" height="100" rx="8"/>
+            </g>
+            <g fill="#e8f0f7" text-anchor="middle" font-family="Source Sans 3, Segoe UI, Helvetica, sans-serif">
+              <text x="126" y="122" font-size="13" font-weight="700">tb_pcap_dpi master</text>
+              <text x="126" y="144" font-size="11" fill="#9bb0c4">tdata tkeep tvalid</text>
+              <text x="126" y="164" font-size="11" fill="#9bb0c4">tstart tlast tuser</text>
+              <text x="425" y="122" font-size="13" font-weight="700">AXI-Stream nets</text>
+              <text x="425" y="148" font-size="11" fill="#9bb0c4">tready = u_nic_rx.s_tready</text>
+              <text x="790" y="48" font-size="13" font-weight="700">u_nic_rx</text>
+              <text x="790" y="70" font-size="11" fill="#9bb0c4">s_* in, s_tready out</text>
+              <text x="790" y="90" font-size="11" fill="#9bb0c4">ready_mask = BP</text>
+              <text x="790" y="194" font-size="13" font-weight="700">u_snoop</text>
+              <text x="790" y="216" font-size="11" fill="#9bb0c4">same t* in</text>
+              <text x="790" y="236" font-size="11" fill="#9bb0c4">tready is input</text>
+            </g>
+            <g fill="none" stroke="#2f8f86" stroke-width="2" marker-end="url(#barr)">
+              <path d="M236 138 H292"/>
+              <path d="M550 118 C 590 118 600 66 632 66"/>
+              <path d="M550 158 C 590 158 600 210 632 210"/>
+              <path d="M640 90 C 590 90 580 128 558 128"/>
+            </g>
+            <text x="568" y="78" fill="#2f8f86" font-family="IBM Plex Mono, ui-monospace, Menlo, sans-serif" font-size="11">s_tready</text>
+          </svg>
+        </figure>
+        <p>
+          <code>u_nic_rx</code> and <code>u_snoop</code> are <strong>siblings</strong>.
+          Beats do not go NIC then parser. Swap only <code>u_nic_rx</code> if you attach another RX.
+        </p>
+      </section>
+
+      <section id="template">
+        <h2>AXIS pin template</h2>
+        <p>
+          Your NIC is a slave. The testbench is the master. Observers tap the bus;
+          they must not drive <code>tready</code>.
+          <code>ready_mask</code> is the bench <code>BP</code> bit. AND it
+          <strong>inside</strong> the slave so a stalled <code>BP</code> cycle is not
+          counted as a beat. Tie <code>ready_mask</code> to 1 only if your core is
+          the sole ready source.
+        </p>
+        <figure class="flow-chart" aria-label="AXI-Stream master, nic_rx slave pins, pkt_snoop observers">
+          <svg class="flow-svg" viewBox="0 0 960 340" role="img" xmlns="http://www.w3.org/2000/svg">
+            <title>NIC RX AXI-Stream pin template</title>
+            <defs>
+              <marker id="parr" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto">
+                <path d="M0 0 L10 4 L0 8 Z" fill="#2f8f86"/>
+              </marker>
+            </defs>
+            <g fill="#0c2340" stroke="#2f8f86" stroke-width="1.4">
+              <rect x="20" y="100" width="240" height="120" rx="8"/>
+              <rect x="360" y="20" width="240" height="280" rx="8"/>
+              <rect x="700" y="100" width="240" height="120" rx="8"/>
+            </g>
+            <g fill="#e8f0f7" text-anchor="middle" font-family="Source Sans 3, Segoe UI, Helvetica, sans-serif">
+              <text x="140" y="148" font-size="14" font-weight="700">tb_pcap_dpi</text>
+              <text x="140" y="170" font-size="12" fill="#9bb0c4">master</text>
+              <text x="140" y="190" font-size="12" fill="#9bb0c4">tdata tvalid tstart tlast</text>
+              <text x="480" y="58" font-size="14" font-weight="700">your RX / nic_rx</text>
+              <text x="480" y="80" font-size="12" fill="#9bb0c4">slave  ·  hdl/nic_rx.sv</text>
+              <text x="480" y="130" font-size="13">s_tdata s_tkeep s_tvalid in</text>
+              <text x="480" y="154" font-size="13">s_tstart s_tlast s_tuser in</text>
+              <text x="480" y="178" font-size="13" font-weight="700">s_tready out</text>
+              <text x="480" y="210" font-size="13">ready_mask in (BP)</text>
+              <text x="480" y="234" font-size="13">pause_en in (optional)</text>
+              <text x="480" y="268" font-size="12" fill="#9bb0c4">rx_pkt_valid rx_bytes</text>
+              <text x="820" y="148" font-size="14" font-weight="700">u_snoop</text>
+              <text x="820" y="170" font-size="12" fill="#9bb0c4">observers</text>
+              <text x="820" y="190" font-size="12" fill="#9bb0c4">tready is an input</text>
+            </g>
+            <g fill="none" stroke="#2f8f86" stroke-width="2" marker-end="url(#parr)">
+              <path d="M260 140 H352"/>
+              <path d="M260 180 H352"/>
+              <path d="M600 160 H692"/>
+            </g>
+            <g fill="#2f8f86" font-family="IBM Plex Mono, ui-monospace, Menlo, sans-serif" font-size="11">
+              <text x="268" y="128">payload + tvalid</text>
+              <text x="268" y="212">s_tready</text>
+              <text x="608" y="148">same beats</text>
+            </g>
+            <path d="M360 180 H260" fill="none" stroke="#2f8f86" stroke-width="2" marker-end="url(#parr)"/>
+          </svg>
+          <figcaption>
+            AMBA AXI-Stream has no <code>tstart</code>; this bench uses it as SOP.
+            Sample only when <code>s_tvalid &amp;&amp; s_tready</code>.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section id="inside">
+        <h2>What nic_rx does</h2>
+        <p>
+          The in-tree template is ingress credits, not a 400GbE MAC.
+          Occupancy rises on an accepted beat and falls one beat per cycle
+          (host drain). <code>s_tready</code> drops when almost full, when
+          <code>pause_en</code> toggles (<code>NIC_PAUSE=1</code>), or when
+          <code>ready_mask</code> is 0. On <code>s_tlast</code> it pulses
+          <code>rx_pkt_valid</code> with a byte count from <code>tkeep</code>.
+          The testbench compares that length to <code>pkt_size_filter</code>.
+        </p>
+        <figure class="flow-chart" aria-label="nic_rx internal: ready_mask, credits, drain, frame count">
+          <svg class="flow-svg" viewBox="0 0 960 220" role="img" xmlns="http://www.w3.org/2000/svg">
+            <title>nic_rx internal ready and credits</title>
+            <defs>
+              <marker id="iarr" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto">
+                <path d="M0 0 L10 4 L0 8 Z" fill="#2f8f86"/>
+              </marker>
+            </defs>
+            <g fill="#0c2340" stroke="#2f8f86" stroke-width="1.4">
+              <rect x="16" y="70" width="170" height="70" rx="8"/>
+              <rect x="230" y="70" width="170" height="70" rx="8"/>
+              <rect x="444" y="70" width="170" height="70" rx="8"/>
+              <rect x="658" y="70" width="286" height="70" rx="8"/>
+            </g>
+            <g fill="#e8f0f7" text-anchor="middle" font-family="Source Sans 3, Segoe UI, Helvetica, sans-serif">
+              <text x="101" y="100" font-size="13" font-weight="700">ready_mask</text>
+              <text x="101" y="120" font-size="11" fill="#9bb0c4">BP from TB</text>
+              <text x="315" y="100" font-size="13" font-weight="700">credits</text>
+              <text x="315" y="120" font-size="11" fill="#9bb0c4">DEPTH=16 almost full</text>
+              <text x="529" y="100" font-size="13" font-weight="700">drain</text>
+              <text x="529" y="120" font-size="11" fill="#9bb0c4">one beat / cycle</text>
+              <text x="801" y="100" font-size="13" font-weight="700">s_tlast → rx_pkt_valid</text>
+              <text x="801" y="120" font-size="11" fill="#9bb0c4">[NIC] rx=  vs streamed</text>
+            </g>
+            <g fill="none" stroke="#2f8f86" stroke-width="2" marker-end="url(#iarr)">
+              <path d="M186 105 H222"/>
+              <path d="M400 105 H436"/>
+              <path d="M614 105 H650"/>
+            </g>
+          </svg>
+          <figcaption>
+            <code>occ_max=1</code> on a line-rate drain is expected: the FIFO does not back up.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section id="pause">
+        <h2>NIC_PAUSE=1</h2>
+        <p>
+          <code>NIC_PAUSE=1</code> is a <strong>slave-side stall</strong> inside
+          <code>nic_rx</code>. It only exists when you also
+          <code>make NIC=1</code>.
+        </p>
+        <p>
+          Each clock, <code>pause_en</code> <strong>toggles <code>bubble</code></strong>.
+          <code>s_tready</code> is 0 whenever <code>bubble</code> is 1, so the NIC
+          accepts a beat only every other cycle (50% ready), even if the FIFO is not full.
+        </p>
+        <pre>s_tready = rst_n && ready_mask && !bubble && !almost_full</pre>
+        <table>
+          <thead>
+            <tr><th>Knob</th><th>Who stalls</th><th>Typical use</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>BP=1 / BP=2</td><td>Bench <code>ready_mask</code> ANDed into the slave</td><td>Extra backpressure from the testbench</td></tr>
+            <tr><td>NIC_PAUSE=1</td><td><code>nic_rx</code> itself (<code>bubble</code>)</td><td>Prove the DUT is the one driving <code>tready</code></td></tr>
+          </tbody>
+        </table>
+        <p>
+          Default is <code>NIC_PAUSE=0</code>: <code>bubble</code> stays 0, no extra toggle.
+        </p>
+        <pre>make NIC=1 NIC_PAUSE=1</pre>
+        <p>
+          Packet counts and <code>[NIC] … mis=0</code> should still match
+          <code>NIC_PAUSE=0</code> if the slave only advances on
+          <code>s_tvalid &amp;&amp; s_tready</code>. Your own RX can tie
+          <code>pause_en</code> off.
+        </p>
+      </section>
+
+      <section id="build">
+        <h2>Build and gate</h2>
+        <pre>make                  # [NIC] off — nic_rx.sv not compiled
+make NIC=1            # u_nic_rx on the bus
+make NIC=1 BP=2
+make NIC=1 NIC_PAUSE=1</pre>
+        <p>
+          Changing <code>NIC</code> rebuilds. End of a <code>NIC=1</code> run:
+        </p>
+        <pre>[NIC] rx=100  drop=0  byte_mis=0  csum_side=0  occ_max=1  mis=0</pre>
+        <p>
+          <code>rx</code> must equal streamed packets. <code>byte_mis=0</code> means
+          the same length as <code>pkt_size_filter</code> on each <code>tlast</code>.
+          Per-packet lines stay <code>[DUT] Classified</code>; there is no per-packet
+          <code>[NIC]</code> print.
+        </p>
+      </section>
+
+      <section id="swap">
+        <h2>Swap your RX</h2>
+        <ol>
+          <li>Keep <code>make NIC=1</code> (or add your file in the Makefile <code>ifeq ($(NIC),1)</code> block).</li>
+          <li>Replace <code>u_nic_rx</code> inside <code>ifdef EN_NIC</code> in <code>hdl/tb_pcap_dpi.sv</code>.</li>
+          <li>Ports: <code>s_tdata</code>, <code>s_tkeep</code>, <code>s_tvalid</code>, <code>s_tready</code> (out),
+            <code>s_tstart</code>, <code>s_tlast</code>, <code>s_tuser</code>, <code>s_tuser_err</code>,
+            <code>ready_mask</code>.</li>
+          <li>Do not open the pcap in HDL. Use <code>PCAP=</code>.</li>
+          <li>Leave <code>u_snoop</code> unless you are replacing the scoreboards too.</li>
+        </ol>
+        <div class="cta gap">
+          <a class="btn btn-navy" href="https://github.com/khademullah/Pcap2HDL/blob/main/hdl/nic_rx.sv">nic_rx.sv</a>
+          <a class="btn btn-line" href="architecture.html">Architecture</a>
+          <a class="btn btn-line" href="index.html">Project site</a>
+        </div>
+      </section>
+    </article>
+  </div>
+
+  <footer class="foot">
+    <div class="wrap foot-inner">
+      <span>Pcap2HDL · MIT · <a href="index.html">Home</a> · <a href="architecture.html">Architecture</a> · NIC RX</span>
+      <span>No capture files are published on this site.</span>
+    </div>
+  </footer>
+</body>
+</html>

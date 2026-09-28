@@ -10,7 +10,7 @@ Pcap2HDL streams `.pcap` files into Verilator through DPI-C (`libpcap`). Each ca
 
 Typical uses: early bring-up of FPGA or ASIC packet pipelines (classification, DPI, RoCE-aware paths) before silicon or a live Ethernet port is available.
 
-Current release: [0.3.0](CHANGELOG.md). Project site: [khademullah.github.io/Pcap2HDL](https://khademullah.github.io/Pcap2HDL/). Architecture (DPI-C, AXI-Stream, parser metadata): [architecture](https://khademullah.github.io/Pcap2HDL/architecture.html). Bring your own NIC: [nic](https://khademullah.github.io/Pcap2HDL/nic.html). Demo (16:9): [pcap2hdl-demo.mp4](https://khademullah.github.io/Pcap2HDL/pcap2hdl-demo.mp4).
+Current release: [0.4.0](CHANGELOG.md). Project site: [khademullah.github.io/Pcap2HDL](https://khademullah.github.io/Pcap2HDL/). Architecture (DPI-C, AXI-Stream, parser metadata): [architecture](https://khademullah.github.io/Pcap2HDL/architecture.html). Bring your own NIC: [nic](https://khademullah.github.io/Pcap2HDL/nic.html). Demo (16:9): [pcap2hdl-demo.mp4](https://khademullah.github.io/Pcap2HDL/pcap2hdl-demo.mp4).
 
 ## Requirements
 
@@ -247,9 +247,10 @@ Capture a new file with `sudo ./scripts/soft_roce_veth.sh setup` then `demo` (`d
 - IPv4 checksum: RFC 1071 in C and HDL (`CSUM mis=0`); `tuser_err` is fail sideband
 - ARP (`0x0806`) and VXLAN (UDP/4789, VNI, inner Ethernet)
 - Replay: optional `+PACE=1` IFG from pcap timestamps (capped); `AXIS_W=64` eight-byte beats; slave `tready` from `nic_rx` AND `+BP=1`/`+BP=2`; `+NIC_PAUSE=1` stalls inside the slave; `DUMP=` writes the bus back to a pcap; `FILTER=` is libpcap BPF (`pcap_offline_filter`) with `matched` / `skipped` counts
+- Bring your own NIC: optional `nic_rx` AXIS slave (`make NIC=1`); observers under `u_snoop`
 - Coverage print `[COV]` size / TCP flags / RoCE opcodes. CI: `.github/workflows/ci.yml` + `scripts/gen_pcap.py`
 
-Still parked: IPv6, VLAN. See [CHANGELOG.md](CHANGELOG.md). How to contribute, and why the parked items are good first PRs: [CONTRIBUTING.md](CONTRIBUTING.md).
+Still parked: IPv6, VLAN. See [CHANGELOG.md](CHANGELOG.md) (0.4.0 “Not in this release”). How to contribute: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

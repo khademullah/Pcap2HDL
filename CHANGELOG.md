@@ -1,12 +1,26 @@
 # Release notes
 
-## Unreleased (0.4)
+## Unreleased
 
-C vs HDL IPv4 checksum, ARP and VXLAN classify, random `tready`, synthetic pcap helper, GitHub Actions.
+Nothing parked here yet. Next work is IPv6 / VLAN (see 0.4.0 “Not in this release”).
+
+## 0.4.0
+
+Bring your own NIC: optional AXI-Stream slave for a user RX, plus C vs HDL IPv4 checksum, ARP/VXLAN, random `tready`, and GitHub Actions.
+
+Headline: hang your receive pipeline on the pcap replay bench. Observers sit **beside** the slave on the same bus, not after it in a FIFO. Docs: `docs/nic.html`.
+
+### Bring your own NIC
+
+- `hdl/nic_rx.sv` is compiled only with `make NIC=1` (`-DEN_NIC`). Instance `u_nic_rx` produces `s_tready`.
+- Observers live under `pkt_snoop` (`u_snoop`). They input `tready`; they do not drive it.
+- `ready_mask` (bench `BP`) is ANDed **inside** the slave. `NIC_PAUSE=1` toggles a bubble in `nic_rx` (not the same as `BP`).
+- Gate: `[NIC] rx=` equals streamed packets, `drop=0`, `byte_mis=0`, `mis=0`. Without the flag: `[NIC] off`.
+- Ingress example (credits + frame length), not a 400GbE MAC. Swap `u_nic_rx`; keep the `s_*` pins.
 
 ### DUT / replay
 
-- `pkt_ip_csum`: RFC 1071 header checksum. DPI-C folds the same bytes; gate `CSUM mis=0`. `tuser` stays the RSS hash; `tuser_err` is C checksum-fail sideband.
+- `pkt_ip_csum`: RFC 1071 header checksum. DPI-C folds the same bytes; gate `CSUM mis=0`. A correct header prints `[CSUM] ffff OK` (fold of the whole header, not the stored checksum field). `tuser` stays the RSS hash; `tuser_err` is C checksum-fail sideband.
 - ARP (`0x0806`) is not `other`. VXLAN (UDP dest 4789) walks the overlay to the inner Ethernet type and reports `vni`.
 - `make BP=2`: `$urandom` `tready`. DUT counts must match `BP=0`.
 - Coverage bins printed as `[COV]` (size class, TCP flags, RoCE send/ack). Verilator 5.032 does not support `covergroup`.
@@ -14,8 +28,7 @@ C vs HDL IPv4 checksum, ARP and VXLAN classify, random `tready`, synthetic pcap 
 ### Tooling
 
 - `python3 scripts/gen_pcap.py ci.pcap` (stdlib; ARP + TCP SYN + VXLAN + runt).
-- `.github/workflows/ci.yml`: generate that file, `make PCAP=ci.pcap BP=2`.
-- Bring your own NIC: `nic_rx` is the in-tree AXI-Stream slave. Compiled only with `make NIC=1` (`-DEN_NIC`). Observers are under `pkt_snoop` (`u_snoop`). Gate `[NIC] ... mis=0`. Docs: `docs/nic.html`.
+- `.github/workflows/ci.yml`: generate that file, `make NIC=1 PCAP=ci.pcap MAX_PACKETS=8 BP=2`.
 
 ### How to check
 
@@ -25,6 +38,10 @@ make NIC=1 PCAP=ci.pcap MAX_PACKETS=8 BP=2   # arp=1 vxlan=1 CSUM mis=0 streamed
 make MAX_PACKETS=8                    # ipv4=8 tcp=8 hs=1 seq_ok=5 CSUM ok=8 mis=0
 make BP=2 MAX_PACKETS=8               # same TCP gate as BP=0
 ```
+
+### Not in this release
+
+IPv6, VLAN, Ethernet FCS, live capture, host CSR map. `nic_rx` is not a line-rate MAC.
 
 ## 0.3.0
 

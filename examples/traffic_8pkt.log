@@ -1,0 +1,67 @@
+$ make MAX_PACKETS=8
+[SV] Opening traffic.pcap
+[C-DPI] Successfully opened traffic.pcap
+[SV] Datalink DLT=1 (Ethernet)
+[SV] Streaming up to 8 packets                                        
+[SV] Processing Packet #1 (captured 74 / wire 74 bytes) ts=1790231670.733870
+[CSUM] ffff OK
+[HDR] dst=badc18c5a289  src=2a6b39583009  etype=0x0800      IPv4 ttl=64 iplen=60  192.168.1.1:34612 -> 192.168.1.2:5201  TCP SYN seq=0x492bad66 ack=0x00000000 plen=0
+[RSS] q=0 hash=3eb75670
+[TCP] SYN_OK
+[DUT] Classified packet: 74 bytes -> STANDARD
+[SV] Processing Packet #2 (captured 74 / wire 74 bytes) ts=1790231670.733894
+[CSUM] ffff OK
+[HDR] dst=2a6b39583009  src=badc18c5a289  etype=0x0800      IPv4 ttl=64 iplen=60  192.168.1.2:5201 -> 192.168.1.1:34612  TCP SYN ACK seq=0x6a9f5792 ack=0x492bad67 plen=0
+[RSS] q=2 hash=ca4e0aee
+[TCP] SYNACK_OK
+[DUT] Classified packet: 74 bytes -> STANDARD
+[SV] Processing Packet #3 (captured 66 / wire 66 bytes) ts=1790231670.733917
+[CSUM] ffff OK
+[HDR] dst=badc18c5a289  src=2a6b39583009  etype=0x0800      IPv4 ttl=64 iplen=52  192.168.1.1:34612 -> 192.168.1.2:5201  TCP ACK seq=0x492bad67 ack=0x6a9f5793 plen=0
+[RSS] q=0 hash=3eb75670
+[TCP] HS_DONE
+[DUT] Classified packet: 66 bytes -> STANDARD
+[SV] Processing Packet #4 (captured 103 / wire 103 bytes) ts=1790231670.734164
+[CSUM] ffff OK
+[HDR] dst=badc18c5a289  src=2a6b39583009  etype=0x0800      IPv4 ttl=64 iplen=89  192.168.1.1:34612 -> 192.168.1.2:5201  TCP PSH ACK seq=0x492bad67 ack=0x6a9f5793 plen=37
+[RSS] q=0 hash=3eb75670
+[TCP] SEQ_OK
+[DUT] Classified packet: 103 bytes -> STANDARD
+[SV] Processing Packet #5 (captured 66 / wire 66 bytes) ts=1790231670.734171
+[CSUM] ffff OK
+[HDR] dst=2a6b39583009  src=badc18c5a289  etype=0x0800      IPv4 ttl=64 iplen=52  192.168.1.2:5201 -> 192.168.1.1:34612  TCP ACK seq=0x6a9f5793 ack=0x492bad8c plen=0
+[RSS] q=2 hash=ca4e0aee
+[TCP] SEQ_OK
+[DUT] Classified packet: 66 bytes -> STANDARD
+[SV] Processing Packet #6 (captured 67 / wire 67 bytes) ts=1790231670.734186
+[CSUM] ffff OK
+[HDR] dst=2a6b39583009  src=badc18c5a289  etype=0x0800      IPv4 ttl=64 iplen=53  192.168.1.2:5201 -> 192.168.1.1:34612  TCP PSH ACK seq=0x6a9f5793 ack=0x492bad8c plen=1
+[RSS] q=2 hash=ca4e0aee
+[TCP] SEQ_OK
+[DUT] Classified packet: 67 bytes -> STANDARD
+[SV] Processing Packet #7 (captured 66 / wire 66 bytes) ts=1790231670.734188
+[CSUM] ffff OK
+[HDR] dst=badc18c5a289  src=2a6b39583009  etype=0x0800      IPv4 ttl=64 iplen=52  192.168.1.1:34612 -> 192.168.1.2:5201  TCP ACK seq=0x492bad8c ack=0x6a9f5794 plen=0
+[RSS] q=0 hash=3eb75670
+[TCP] SEQ_OK
+[DUT] Classified packet: 66 bytes -> STANDARD
+[SV] Processing Packet #8 (captured 70 / wire 70 bytes) ts=1790231670.734216
+[CSUM] ffff OK
+[HDR] dst=badc18c5a289  src=2a6b39583009  etype=0x0800      IPv4 ttl=64 iplen=56  192.168.1.1:34612 -> 192.168.1.2:5201  TCP PSH ACK seq=0x492bad8c ack=0x6a9f5794 plen=4
+[RSS] q=0 hash=3eb75670
+[TCP] SEQ_OK
+[DUT] Classified packet: 70 bytes -> STANDARD
+
+[SV] Reached packet cap of 8. Stopping stream.
+
+[SV] Simulation finished. File=traffic.pcap  Streamed 8 packets.
+[DUT] Size    runt=0  standard=8  jumbo=0
+[DUT] Header  ipv4=8  ipv6=0  tcp=8  udp=0  roce=0  arp=0  vxlan=0  other=0  trunc=0
+[DUT] Tracker msg=0  ack=0  psn_err=0  op_err=0  psn_gap=0
+[DUT] TCP     hs=1  fin=0  rst=0  seq_ok=5  seq_err=0  op_err=0
+[DUT] Length  mismatch=0
+[DUT] ICRC    ok=0  err=0  skip=0
+[DUT] CSUM     ok=8  err=0  skip=0  mis=0
+[DUT] RSS     q0=5  q1=0  q2=3  q3=0  mis=0  skip=0
+[NIC] off  (rebuild with make NIC=1)
+[COV] size    runt=0  standard=8  jumbo=0  tcp SYN=2 ACK=7 FIN=0 RST=0  roce send=0 ack=0

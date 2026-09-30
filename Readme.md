@@ -126,24 +126,28 @@ One `[HDR]` line is printed when headers are valid (after L4 ports for TCP/UDP).
 
 ```
 [SV] Datalink DLT=1 (Ethernet)
-[SV] Processing Packet #1 (captured 74 / wire 74 bytes) ts=1788332455.060537
-[HDR] ... IPv4 ttl=64 iplen=60  192.168.1.1:42262 -> 192.168.1.2:5201  TCP SYN seq=0x5803f137 ack=0x00000000 plen=0
+[SV] Processing Packet #1 (captured 74 / wire 74 bytes) ts=1790231670.733870
+[CSUM] ffff OK
+[HDR] ... IPv4 ttl=64 iplen=60  192.168.1.1:34612 -> 192.168.1.2:5201  TCP SYN seq=0x492bad66 ack=0x00000000 plen=0
+[RSS] q=0 hash=3eb75670
 [TCP] SYN_OK
 [DUT] Classified packet: 74 bytes -> STANDARD
 [SV] Processing Packet #2 ...
-[HDR] ... IPv4 ttl=64 iplen=60  192.168.1.2:5201 -> 192.168.1.1:42262  TCP SYN ACK seq=0x15c9e53f ack=0x5803f138 plen=0
+[HDR] ... IPv4 ttl=64 iplen=60  192.168.1.2:5201 -> 192.168.1.1:34612  TCP SYN ACK seq=0x6a9f5792 ack=0x492bad67 plen=0
 [TCP] SYNACK_OK
 ...
 [TCP] HS_DONE
 ...
 [TCP] SEQ_OK
 ...
-[DUT] Header  ipv4=8  tcp=8  udp=0  roce=0  other=0  trunc=0
+[DUT] Header  ipv4=8  ipv6=0  tcp=8  udp=0  roce=0  arp=0  vxlan=0  other=0  trunc=0
 [DUT] TCP     hs=1  fin=0  rst=0  seq_ok=5  seq_err=0  op_err=0
 [DUT] Length  mismatch=0
-[DUT] ICRC    ok=0  err=0  skip=0
+[DUT] CSUM     ok=8  err=0  skip=0  mis=0
 [DUT] RSS     q0=5  q1=0  q2=3  q3=0  mis=0  skip=0
 ```
+
+Full run: [examples/traffic_8pkt.log](examples/traffic_8pkt.log).
 
 Waveform: `docs/gtkwave_8pkt.jpg`. Each `tvalid` burst is one frame (`tstart` / `tlast`). At millisecond zoom the 10 ns clock looks solid; zoom into a burst to see edges.
 
@@ -184,8 +188,10 @@ make FILTER='udp'
 [SV] Reached end of PCAP before hitting the packet cap.
 [C-DPI] BPF matched=0 skipped=1000
 [SV] Simulation finished. File=traffic.pcap  Streamed 0 packets.
-[DUT] Header  ipv4=0  tcp=0  udp=0  roce=0  other=0  trunc=0
+[DUT] Header  ipv4=0  ipv6=0  tcp=0  udp=0  roce=0  arp=0  vxlan=0  other=0  trunc=0
 ```
+
+Full run: [examples/bpf_udp.log](examples/bpf_udp.log).
 
 Soft-RoCE is UDP/4791, so the same knob keeps the RoCE DUT and drops TCP:
 
@@ -194,16 +200,16 @@ make PCAP=soft_roce.pcap FILTER='udp port 4791'
 ```
 
 ```
-[C-DPI] BPF filter: udp port 4791
-[HDR] ... 192.168.10.1:49441 -> 192.168.10.2:4791  ROCE SEND_LAST ... AckReq
+[HDR] ... IPv4 ttl=64 iplen=1068  192.168.10.1:49441 -> 192.168.10.2:4791  ROCE SEND_LAST qp=0x11 psn=0xe1b96f pkey=0xffff AckReq
 [TRK] MSG_DONE
 [DUT] ICRC  8a401571 OK
 [HDR] ... ROCE ACK ...
 [TRK] ACK_OK
 [DUT] ICRC  dabe7a49 OK
-[DUT] Header  ipv4=8  tcp=0  udp=0  roce=8  other=0  trunc=0
+[DUT] Header  ipv4=8  ipv6=0  tcp=0  udp=0  roce=8  arp=0  vxlan=0  other=0  trunc=0
 [DUT] Tracker msg=1  ack=1  psn_err=0  op_err=0  psn_gap=0
 [DUT] ICRC    ok=8  err=0  skip=0
+[DUT] CSUM     ok=8  err=0  skip=0  mis=0
 ```
 
 A 1000-packet veth capture can stay one file: `make FILTER='tcp port 5201'` streams 100 matches (`skipped=0` if the head of the file is all TCP); `make FILTER='udp'` streams 0 and reports `skipped=1000`.
@@ -216,7 +222,7 @@ make PCAP=soft_roce.pcap MAX_PACKETS=16
 make PCAP=soft_roce.pcap FILTER='udp port 4791'
 ```
 
-UDP/4791 frames are tagged `ROCE` with BTH opcode, dest QP, and PSN. The tracker emits `OK` on in-order fragments, `MSG_DONE` on Send Last, and `ACK_OK` on the matching reverse ACK. An 8-packet cap finishes mid-message in the reverse direction (`msg=1 ack=1`). `MAX_PACKETS=16` completes three messages (`msg=3 ack=3`, three runt ACKs) and starts the next Send. Logs: `examples/traffic_8pkt.log`, `examples/soft_roce_8pkt.log`, `examples/soft_roce_16pkt.log`.
+UDP/4791 frames are tagged `ROCE` with BTH opcode, dest QP, and PSN. The tracker emits `OK` on in-order fragments, `MSG_DONE` on Send Last, and `ACK_OK` on the matching reverse ACK. An 8-packet cap finishes mid-message in the reverse direction (`msg=1 ack=1`). `MAX_PACKETS=16` completes three messages (`msg=3 ack=3`, three runt ACKs) and starts the next Send. Compact logs: [examples/README.md](examples/README.md) (`traffic_8pkt.log`, `soft_roce_8pkt.log`, `soft_roce_16pkt.log`, `ci_nic.log`, `ipv6_20pkt.log`, `bpf_udp.log`).
 
 ```
 [HDR] ... IPv4 ttl=64 iplen=1068  192.168.10.1:49441 -> 192.168.10.2:4791  ROCE SEND_LAST qp=0x11 psn=0xe1b96f pkey=0xffff AckReq
@@ -226,13 +232,41 @@ UDP/4791 frames are tagged `ROCE` with BTH opcode, dest QP, and PSN. The tracker
 [DUT] Classified packet: 62 bytes ->     RUNT
 [DUT] ICRC  dabe7a49 OK
 ...
-[DUT] Header  ipv4=8  tcp=0  udp=0  roce=8  other=0  trunc=0
+[DUT] Header  ipv4=8  ipv6=0  tcp=0  udp=0  roce=8  arp=0  vxlan=0  other=0  trunc=0
 [DUT] Tracker msg=1  ack=1  psn_err=0  op_err=0  psn_gap=0
 [DUT] Length  mismatch=0
 [DUT] ICRC    ok=8  err=0  skip=0
+[DUT] CSUM     ok=8  err=0  skip=0  mis=0
+[DUT] RSS     q0=0  q1=8  q2=0  q3=0  mis=0  skip=0
 ```
 
+Full run: [examples/soft_roce_8pkt.log](examples/soft_roce_8pkt.log). Sixteen packets: [examples/soft_roce_16pkt.log](examples/soft_roce_16pkt.log).
+
 Capture a new file with `sudo ./scripts/soft_roce_veth.sh setup` then `demo` (`docs/soft_roce_veth.md`).
+
+## Example: IPv6 (`ns1_iperf6.pcap`)
+
+Local capture (not in git). Base header only.
+
+```bash
+make NIC=1 PCAP=ns1_iperf6.pcap MAX_PACKETS=20
+```
+
+```
+[HDR] ... etype=0x86dd      IPv6 hop=255 iplen=56  fe80…:0 -> ff02…:0
+[HDR] ... IPv6 hop=64 iplen=80  fd00…:44432 -> fd00…:5201  TCP SYN seq=0x6f2e64f4 ...
+[TCP] SYN_OK
+...
+[TCP] HS_DONE
+...
+[DUT] Header  ipv4=0  ipv6=20  tcp=17  udp=0  roce=0  arp=0  vxlan=0  other=0  trunc=0
+[DUT] TCP     hs=2  fin=0  rst=0  seq_ok=11  seq_err=0  op_err=0
+[DUT] CSUM     ok=0  err=0  skip=20  mis=0
+[DUT] RSS     ...  mis=0  skip=0
+[NIC] rx=20  drop=0  byte_mis=0  ... mis=0
+```
+
+Packets 1–3 are ICMPv6 (multicast, hop 255). Two iperf TCP sessions (`44432` and `44438`). Full run: [examples/ipv6_20pkt.log](examples/ipv6_20pkt.log). CI synthetic SYN: [examples/ci_nic.log](examples/ci_nic.log).
 
 ## Status
 

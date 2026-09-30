@@ -1,0 +1,21 @@
+$ make FILTER='udp' MAX_PACKETS=100
+[SV] Opening traffic.pcap
+[C-DPI] Successfully opened traffic.pcap
+[SV] Datalink DLT=1 (Ethernet)
+[C-DPI] BPF filter: udp
+[SV] Streaming up to 100 packets                                         FILTER=udp
+
+[SV] Reached end of PCAP before hitting the packet cap.
+[C-DPI] BPF matched=0 skipped=1000
+
+[SV] Simulation finished. File=traffic.pcap  Streamed 0 packets.
+[DUT] Size    runt=0  standard=0  jumbo=0
+[DUT] Header  ipv4=0  ipv6=0  tcp=0  udp=0  roce=0  arp=0  vxlan=0  other=0  trunc=0
+[DUT] Tracker msg=0  ack=0  psn_err=0  op_err=0  psn_gap=0
+[DUT] TCP     hs=0  fin=0  rst=0  seq_ok=0  seq_err=0  op_err=0
+[DUT] Length  mismatch=0
+[DUT] ICRC    ok=0  err=0  skip=0
+[DUT] CSUM     ok=0  err=0  skip=0  mis=0
+[DUT] RSS     q0=0  q1=0  q2=0  q3=0  mis=0  skip=0
+[NIC] off  (rebuild with make NIC=1)
+[COV] size    runt=0  standard=0  jumbo=0  tcp SYN=0 ACK=0 FIN=0 RST=0  roce send=0 ack=0

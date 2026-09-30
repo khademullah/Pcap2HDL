@@ -1,6 +1,7 @@
 obj_dir/
 *.vcd
 *.log
+!examples/*.log
 *.pcap
 .venv/
 coverage.dat

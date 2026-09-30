@@ -1,0 +1,116 @@
+$ make NIC=1 PCAP=ns1_iperf6.pcap MAX_PACKETS=20
+[SV] Opening ns1_iperf6.pcap
+[C-DPI] Successfully opened ns1_iperf6.pcap
+[SV] Datalink DLT=1 (Ethernet)
+[SV] Streaming up to 20 packets                                        
+[SV] Processing Packet #1 (captured 70 / wire 70 bytes) ts=1790744278.035286
+[HDR] dst=333300000002  src=badc18c5a289  etype=0x86dd      IPv6 hop=255 iplen=56  fe80000000000000b8dc18fffec5a289:0 -> ff020000000000000000000000000002:0  
+[RSS] q=2 hash=2744be1e
+[DUT] Classified packet: 70 bytes -> STANDARD
+[SV] Processing Packet #2 (captured 86 / wire 86 bytes) ts=1790744282.465858
+[HDR] dst=3333ff000002  src=2a6b39583009  etype=0x86dd      IPv6 hop=255 iplen=72  fd000000000000000000000000000001:0 -> ff0200000000000000000001ff000002:0  
+[RSS] q=2 hash=e590126e
+[DUT] Classified packet: 86 bytes -> STANDARD
+[SV] Processing Packet #3 (captured 86 / wire 86 bytes) ts=1790744282.465880
+[HDR] dst=2a6b39583009  src=badc18c5a289  etype=0x86dd      IPv6 hop=255 iplen=72  fd000000000000000000000000000002:0 -> fd000000000000000000000000000001:0  
+[RSS] q=3 hash=7e57b17b
+[DUT] Classified packet: 86 bytes -> STANDARD
+[SV] Processing Packet #4 (captured 94 / wire 94 bytes) ts=1790744282.465883
+[HDR] dst=badc18c5a289  src=2a6b39583009  etype=0x86dd      IPv6 hop=64 iplen=80  fd000000000000000000000000000001:44432 -> fd000000000000000000000000000002:5201  TCP SYN seq=0x6f2e64f4 ack=0x00000000 plen=0
+[RSS] q=3 hash=7fa544a3
+[TCP] SYN_OK
+[DUT] Classified packet: 94 bytes -> STANDARD
+[SV] Processing Packet #5 (captured 94 / wire 94 bytes) ts=1790744282.465898
+[HDR] dst=2a6b39583009  src=badc18c5a289  etype=0x86dd      IPv6 hop=64 iplen=80  fd000000000000000000000000000002:5201 -> fd000000000000000000000000000001:44432  TCP SYN ACK seq=0x5b214ac5 ack=0x6f2e64f5 plen=0
+[RSS] q=1 hash=2bd37b5d
+[TCP] SYNACK_OK
+[DUT] Classified packet: 94 bytes -> STANDARD
+[SV] Processing Packet #6 (captured 86 / wire 86 bytes) ts=1790744282.465905
+[HDR] dst=badc18c5a289  src=2a6b39583009  etype=0x86dd      IPv6 hop=64 iplen=72  fd000000000000000000000000000001:44432 -> fd000000000000000000000000000002:5201  TCP ACK seq=0x6f2e64f5 ack=0x5b214ac6 plen=0
+[RSS] q=3 hash=7fa544a3
+[TCP] HS_DONE
+[DUT] Classified packet: 86 bytes -> STANDARD
+[SV] Processing Packet #7 (captured 123 / wire 123 bytes) ts=1790744282.465963
+[HDR] dst=badc18c5a289  src=2a6b39583009  etype=0x86dd      IPv6 hop=64 iplen=109  fd000000000000000000000000000001:44432 -> fd000000000000000000000000000002:5201  TCP PSH ACK seq=0x6f2e64f5 ack=0x5b214ac6 plen=37
+[RSS] q=3 hash=7fa544a3
+[TCP] SEQ_OK
+[DUT] Classified packet: 123 bytes -> STANDARD
+[SV] Processing Packet #8 (captured 86 / wire 86 bytes) ts=1790744282.465966
+[HDR] dst=2a6b39583009  src=badc18c5a289  etype=0x86dd      IPv6 hop=64 iplen=72  fd000000000000000000000000000002:5201 -> fd000000000000000000000000000001:44432  TCP ACK seq=0x5b214ac6 ack=0x6f2e651a plen=0
+[RSS] q=1 hash=2bd37b5d
+[TCP] SEQ_OK
+[DUT] Classified packet: 86 bytes -> STANDARD
+[SV] Processing Packet #9 (captured 87 / wire 87 bytes) ts=1790744282.466086
+[HDR] dst=2a6b39583009  src=badc18c5a289  etype=0x86dd      IPv6 hop=64 iplen=73  fd000000000000000000000000000002:5201 -> fd000000000000000000000000000001:44432  TCP PSH ACK seq=0x5b214ac6 ack=0x6f2e651a plen=1
+[RSS] q=1 hash=2bd37b5d
+[TCP] SEQ_OK
+[DUT] Classified packet: 87 bytes -> STANDARD
+[SV] Processing Packet #10 (captured 86 / wire 86 bytes) ts=1790744282.466120
+[HDR] dst=badc18c5a289  src=2a6b39583009  etype=0x86dd      IPv6 hop=64 iplen=72  fd000000000000000000000000000001:44432 -> fd000000000000000000000000000002:5201  TCP ACK seq=0x6f2e651a ack=0x5b214ac7 plen=0
+[RSS] q=3 hash=7fa544a3
+[TCP] SEQ_OK
+[DUT] Classified packet: 86 bytes -> STANDARD
+[SV] Processing Packet #11 (captured 90 / wire 90 bytes) ts=1790744282.466261
+[HDR] dst=badc18c5a289  src=2a6b39583009  etype=0x86dd      IPv6 hop=64 iplen=76  fd000000000000000000000000000001:44432 -> fd000000000000000000000000000002:5201  TCP PSH ACK seq=0x6f2e651a ack=0x5b214ac7 plen=4
+[RSS] q=3 hash=7fa544a3
+[TCP] SEQ_OK
+[DUT] Classified packet: 90 bytes -> STANDARD
+[SV] Processing Packet #12 (captured 210 / wire 210 bytes) ts=1790744282.466304
+[HDR] dst=badc18c5a289  src=2a6b39583009  etype=0x86dd      IPv6 hop=64 iplen=196  fd000000000000000000000000000001:44432 -> fd000000000000000000000000000002:5201  TCP PSH ACK seq=0x6f2e651e ack=0x5b214ac7 plen=124
+[RSS] q=3 hash=7fa544a3
+[TCP] SEQ_OK
+[DUT] Classified packet: 210 bytes -> STANDARD
+[SV] Processing Packet #13 (captured 86 / wire 86 bytes) ts=1790744282.466349
+[HDR] dst=2a6b39583009  src=badc18c5a289  etype=0x86dd      IPv6 hop=64 iplen=72  fd000000000000000000000000000002:5201 -> fd000000000000000000000000000001:44432  TCP ACK seq=0x5b214ac7 ack=0x6f2e659a plen=0
+[RSS] q=1 hash=2bd37b5d
+[TCP] SEQ_OK
+[DUT] Classified packet: 86 bytes -> STANDARD
+[SV] Processing Packet #14 (captured 87 / wire 87 bytes) ts=1790744282.466368
+[HDR] dst=2a6b39583009  src=badc18c5a289  etype=0x86dd      IPv6 hop=64 iplen=73  fd000000000000000000000000000002:5201 -> fd000000000000000000000000000001:44432  TCP PSH ACK seq=0x5b214ac7 ack=0x6f2e659a plen=1
+[RSS] q=1 hash=2bd37b5d
+[TCP] SEQ_OK
+[DUT] Classified packet: 87 bytes -> STANDARD
+[SV] Processing Packet #15 (captured 94 / wire 94 bytes) ts=1790744282.466396
+[HDR] dst=badc18c5a289  src=2a6b39583009  etype=0x86dd      IPv6 hop=64 iplen=80  fd000000000000000000000000000001:44438 -> fd000000000000000000000000000002:5201  TCP SYN seq=0xac04a220 ack=0x00000000 plen=0
+[RSS] q=1 hash=848cdcdd
+[TCP] SYN_OK
+[DUT] Classified packet: 94 bytes -> STANDARD
+[SV] Processing Packet #16 (captured 94 / wire 94 bytes) ts=1790744282.466402
+[HDR] dst=2a6b39583009  src=badc18c5a289  etype=0x86dd      IPv6 hop=64 iplen=80  fd000000000000000000000000000002:5201 -> fd000000000000000000000000000001:44438  TCP SYN ACK seq=0x6c774de9 ack=0xac04a221 plen=0
+[RSS] q=0 hash=b3adfb1c
+[TCP] SYNACK_OK
+[DUT] Classified packet: 94 bytes -> STANDARD
+[SV] Processing Packet #17 (captured 86 / wire 86 bytes) ts=1790744282.466407
+[HDR] dst=badc18c5a289  src=2a6b39583009  etype=0x86dd      IPv6 hop=64 iplen=72  fd000000000000000000000000000001:44438 -> fd000000000000000000000000000002:5201  TCP ACK seq=0xac04a221 ack=0x6c774dea plen=0
+[RSS] q=1 hash=848cdcdd
+[TCP] HS_DONE
+[DUT] Classified packet: 86 bytes -> STANDARD
+[SV] Processing Packet #18 (captured 123 / wire 123 bytes) ts=1790744282.466521
+[HDR] dst=badc18c5a289  src=2a6b39583009  etype=0x86dd      IPv6 hop=64 iplen=109  fd000000000000000000000000000001:44438 -> fd000000000000000000000000000002:5201  TCP PSH ACK seq=0xac04a221 ack=0x6c774dea plen=37
+[RSS] q=1 hash=848cdcdd
+[TCP] SEQ_OK
+[DUT] Classified packet: 123 bytes -> STANDARD
+[SV] Processing Packet #19 (captured 86 / wire 86 bytes) ts=1790744282.466524
+[HDR] dst=2a6b39583009  src=badc18c5a289  etype=0x86dd      IPv6 hop=64 iplen=72  fd000000000000000000000000000002:5201 -> fd000000000000000000000000000001:44438  TCP ACK seq=0x6c774dea ack=0xac04a246 plen=0
+[RSS] q=0 hash=b3adfb1c
+[TCP] SEQ_OK
+[DUT] Classified packet: 86 bytes -> STANDARD
+[SV] Processing Packet #20 (captured 87 / wire 87 bytes) ts=1790744282.467030
+[HDR] dst=2a6b39583009  src=badc18c5a289  etype=0x86dd      IPv6 hop=64 iplen=73  fd000000000000000000000000000002:5201 -> fd000000000000000000000000000001:44432  TCP PSH ACK seq=0x5b214ac8 ack=0x6f2e659a plen=1
+[RSS] q=1 hash=2bd37b5d
+[TCP] SEQ_OK
+[DUT] Classified packet: 87 bytes -> STANDARD
+
+[SV] Reached packet cap of 20. Stopping stream.
+
+[SV] Simulation finished. File=ns1_iperf6.pcap  Streamed 20 packets.
+[DUT] Size    runt=0  standard=20  jumbo=0
+[DUT] Header  ipv4=0  ipv6=20  tcp=17  udp=0  roce=0  arp=0  vxlan=0  other=0  trunc=0
+[DUT] Tracker msg=0  ack=0  psn_err=0  op_err=0  psn_gap=0
+[DUT] TCP     hs=2  fin=0  rst=0  seq_ok=11  seq_err=0  op_err=0
+[DUT] Length  mismatch=0
+[DUT] ICRC    ok=0  err=0  skip=0
+[DUT] CSUM     ok=0  err=0  skip=20  mis=0
+[DUT] RSS     q0=2  q1=9  q2=2  q3=7  mis=0  skip=0
+[NIC] rx=20  drop=0  byte_mis=0  csum_side=0  occ_max=1  mis=0
+[COV] size    runt=0  standard=20  jumbo=0  tcp SYN=4 ACK=15 FIN=0 RST=0  roce send=0 ack=0

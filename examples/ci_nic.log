@@ -1,0 +1,42 @@
+$ python3 scripts/gen_pcap.py ci.pcap && make NIC=1 PCAP=ci.pcap MAX_PACKETS=8 BP=2
+[SV] Opening ci.pcap
+[C-DPI] Successfully opened ci.pcap
+[SV] Datalink DLT=1 (Ethernet)
+[SV] Streaming up to 8 packets (BP=2, extra random tready)            
+[SV] Processing Packet #1 (captured 42 / wire 42 bytes) ts=0.000000
+[HDR] dst=ffffffffffff  src=020000000001  etype=0x0806  ARP
+[DUT] Classified packet: 42 bytes ->     RUNT
+[SV] Processing Packet #2 (captured 54 / wire 54 bytes) ts=1.000000
+[CSUM] ffff OK
+[HDR] dst=020000000002  src=020000000001  etype=0x0800      IPv4 ttl=64 iplen=40  192.168.1.1:34612 -> 192.168.1.2:5201  TCP SYN seq=0x00000001 ack=0x00000000 plen=0
+[RSS] q=0 hash=3eb75670
+[TCP] SYN_OK
+[DUT] Classified packet: 54 bytes ->     RUNT
+[SV] Processing Packet #3 (captured 94 / wire 94 bytes) ts=2.000000
+[CSUM] ffff OK
+[HDR] dst=020000000002  src=020000000001  etype=0x0800  IPv4 ttl=64 iplen=80  192.168.10.1:4789 -> 192.168.10.2:4789  VXLAN vni=100
+[RSS] q=3 hash=67cf2a2b
+[DUT] Classified packet: 94 bytes -> STANDARD
+[SV] Processing Packet #4 (captured 19 / wire 19 bytes) ts=3.000000
+[DUT] Classified packet: 19 bytes ->     RUNT
+[DUT] LEN_MISMATCH  captured=19  expected=28544 (14+iplen)
+[HDR] dst=020000000002  src=020000000001  etype=0x0800     TRUNC ttl=0 iplen=28530  0.0.0.0:0 -> 0.0.0.0:0  
+[SV] Processing Packet #5 (captured 74 / wire 74 bytes) ts=4.000000
+[HDR] dst=020000000002  src=020000000001  etype=0x86dd      IPv6 hop=64 iplen=60  fd000000000000000000000000000001:34612 -> fd000000000000000000000000000002:5201  TCP SYN seq=0x00000001 ack=0x00000000 plen=0
+[RSS] q=0 hash=fca58788
+[TCP] SYN_OK
+[DUT] Classified packet: 74 bytes -> STANDARD
+
+[SV] Reached end of PCAP before hitting the packet cap.
+
+[SV] Simulation finished. File=ci.pcap  Streamed 5 packets.
+[DUT] Size    runt=3  standard=2  jumbo=0
+[DUT] Header  ipv4=2  ipv6=1  tcp=2  udp=0  roce=0  arp=1  vxlan=1  other=0  trunc=1
+[DUT] Tracker msg=0  ack=0  psn_err=0  op_err=0  psn_gap=0
+[DUT] TCP     hs=0  fin=0  rst=0  seq_ok=0  seq_err=0  op_err=0
+[DUT] Length  mismatch=1
+[DUT] ICRC    ok=0  err=0  skip=0
+[DUT] CSUM     ok=2  err=0  skip=3  mis=0
+[DUT] RSS     q0=2  q1=0  q2=0  q3=1  mis=0  skip=2
+[NIC] rx=5  drop=0  byte_mis=0  csum_side=0  occ_max=1  mis=0
+[COV] size    runt=3  standard=2  jumbo=0  tcp SYN=2 ACK=0 FIN=0 RST=0  roce send=0 ack=0

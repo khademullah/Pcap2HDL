@@ -1,0 +1,75 @@
+$ make PCAP=soft_roce.pcap MAX_PACKETS=8
+[SV] Opening soft_roce.pcap
+[C-DPI] Successfully opened soft_roce.pcap
+[SV] Datalink DLT=1 (Ethernet)
+[SV] Streaming up to 8 packets                                        
+[SV] Processing Packet #1 (captured 1082 / wire 1082 bytes) ts=1790143196.741371
+[CSUM] ffff OK
+[HDR] dst=2a6b39583009  src=ea7e3dc337c9  etype=0x0800  IPv4 ttl=64 iplen=1068  192.168.10.1:49441 -> 192.168.10.2:4791  ROCE SEND_FIRST qp=0x11 psn=0xe1b96c pkey=0xffff
+[RSS] q=1 hash=af4721b1
+[TRK] OK
+[DUT] Classified packet: 1082 bytes -> STANDARD
+[DUT] ICRC  033a8dbb OK
+[SV] Processing Packet #2 (captured 1082 / wire 1082 bytes) ts=1790143196.741386
+[CSUM] ffff OK
+[HDR] dst=2a6b39583009  src=ea7e3dc337c9  etype=0x0800  IPv4 ttl=64 iplen=1068  192.168.10.1:49441 -> 192.168.10.2:4791  ROCE SEND_MIDDLE qp=0x11 psn=0xe1b96d pkey=0xffff
+[RSS] q=1 hash=af4721b1
+[TRK] OK
+[DUT] Classified packet: 1082 bytes -> STANDARD
+[DUT] ICRC  47ff588a OK
+[SV] Processing Packet #3 (captured 1082 / wire 1082 bytes) ts=1790143196.741389
+[CSUM] ffff OK
+[HDR] dst=2a6b39583009  src=ea7e3dc337c9  etype=0x0800  IPv4 ttl=64 iplen=1068  192.168.10.1:49441 -> 192.168.10.2:4791  ROCE SEND_MIDDLE qp=0x11 psn=0xe1b96e pkey=0xffff
+[RSS] q=1 hash=af4721b1
+[TRK] OK
+[DUT] Classified packet: 1082 bytes -> STANDARD
+[DUT] ICRC  1a919363 OK
+[SV] Processing Packet #4 (captured 1082 / wire 1082 bytes) ts=1790143196.741392
+[CSUM] ffff OK
+[HDR] dst=2a6b39583009  src=ea7e3dc337c9  etype=0x0800  IPv4 ttl=64 iplen=1068  192.168.10.1:49441 -> 192.168.10.2:4791  ROCE SEND_LAST qp=0x11 psn=0xe1b96f pkey=0xffff AckReq
+[RSS] q=1 hash=af4721b1
+[TRK] MSG_DONE
+[DUT] Classified packet: 1082 bytes -> STANDARD
+[DUT] ICRC  8a401571 OK
+[SV] Processing Packet #5 (captured 62 / wire 62 bytes) ts=5504.077731
+[CSUM] ffff OK
+[HDR] dst=ea7e3dc337c9  src=2a6b39583009  etype=0x0800  IPv4 ttl=64 iplen=48  192.168.10.2:49441 -> 192.168.10.1:4791  ROCE ACK qp=0x11 psn=0xe1b96f pkey=0xffff
+[RSS] q=1 hash=84563eb1
+[TRK] ACK_OK
+[DUT] Classified packet: 62 bytes ->     RUNT
+[DUT] ICRC  dabe7a49 OK
+[SV] Processing Packet #6 (captured 1082 / wire 1082 bytes) ts=5504.090477
+[CSUM] ffff OK
+[HDR] dst=ea7e3dc337c9  src=2a6b39583009  etype=0x0800  IPv4 ttl=64 iplen=1068  192.168.10.2:49441 -> 192.168.10.1:4791  ROCE SEND_FIRST qp=0x11 psn=0xb3005c pkey=0xffff
+[RSS] q=1 hash=84563eb1
+[TRK] OK
+[DUT] Classified packet: 1082 bytes -> STANDARD
+[DUT] ICRC  db91fbab OK
+[SV] Processing Packet #7 (captured 1082 / wire 1082 bytes) ts=5504.090498
+[CSUM] ffff OK
+[HDR] dst=ea7e3dc337c9  src=2a6b39583009  etype=0x0800  IPv4 ttl=64 iplen=1068  192.168.10.2:49441 -> 192.168.10.1:4791  ROCE SEND_MIDDLE qp=0x11 psn=0xb3005d pkey=0xffff
+[RSS] q=1 hash=84563eb1
+[TRK] OK
+[DUT] Classified packet: 1082 bytes -> STANDARD
+[DUT] ICRC  9f542e9a OK
+[SV] Processing Packet #8 (captured 1082 / wire 1082 bytes) ts=5504.090501
+[CSUM] ffff OK
+[HDR] dst=ea7e3dc337c9  src=2a6b39583009  etype=0x0800  IPv4 ttl=64 iplen=1068  192.168.10.2:49441 -> 192.168.10.1:4791  ROCE SEND_MIDDLE qp=0x11 psn=0xb3005e pkey=0xffff
+[RSS] q=1 hash=84563eb1
+[TRK] OK
+[DUT] Classified packet: 1082 bytes -> STANDARD
+[DUT] ICRC  c23ae573 OK
+
+[SV] Reached packet cap of 8. Stopping stream.
+
+[SV] Simulation finished. File=soft_roce.pcap  Streamed 8 packets.
+[DUT] Size    runt=1  standard=7  jumbo=0
+[DUT] Header  ipv4=8  ipv6=0  tcp=0  udp=0  roce=8  arp=0  vxlan=0  other=0  trunc=0
+[DUT] Tracker msg=1  ack=1  psn_err=0  op_err=0  psn_gap=0
+[DUT] TCP     hs=0  fin=0  rst=0  seq_ok=0  seq_err=0  op_err=0
+[DUT] Length  mismatch=0
+[DUT] ICRC    ok=8  err=0  skip=0
+[DUT] CSUM     ok=8  err=0  skip=0  mis=0
+[DUT] RSS     q0=0  q1=8  q2=0  q3=0  mis=0  skip=0
+[NIC] off  (rebuild with make NIC=1)
+[COV] size    runt=1  standard=7  jumbo=0  tcp SYN=0 ACK=0 FIN=0 RST=0  roce send=7 ack=1

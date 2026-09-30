@@ -31,17 +31,22 @@
 [RSS] q=0 hash=3eb75670
 [TCP] SYN_OK
 [DUT] Classified packet: 58 bytes ->     RUNT
+[SV] Processing Packet #7 (captured 78 / wire 78 bytes) ts=6.000000
+[HDR] dst=020000000002  src=020000000001  etype=0x8100      VLAN vid=100  IPv6 hop=64 iplen=60  fd000000000000000000000000000001:34612 -> fd000000000000000000000000000002:5201  TCP SYN seq=0x00000001 ack=0x00000000 plen=0
+[RSS] q=0 hash=fca58788
+[TCP] SYN_OK
+[DUT] Classified packet: 78 bytes -> STANDARD
 
 [SV] Reached end of PCAP before hitting the packet cap.
 
-[SV] Simulation finished. File=ci.pcap  Streamed 6 packets.
-[DUT] Size    runt=4  standard=2  jumbo=0
-[DUT] Header  ipv4=3  ipv6=1  vlan=1  tcp=3  udp=0  roce=0  arp=1  vxlan=1  other=0  trunc=1
+[SV] Simulation finished. File=ci.pcap  Streamed 7 packets.
+[DUT] Size    runt=4  standard=3  jumbo=0
+[DUT] Header  ipv4=3  ipv6=2  vlan=2  tcp=4  udp=0  roce=0  arp=1  vxlan=1  other=0  trunc=1
 [DUT] Tracker msg=0  ack=0  psn_err=0  op_err=0  psn_gap=0
 [DUT] TCP     hs=0  fin=0  rst=0  seq_ok=0  seq_err=0  op_err=0
 [DUT] Length  mismatch=1
 [DUT] ICRC    ok=0  err=0  skip=0
-[DUT] CSUM     ok=3  err=0  skip=3  mis=0
-[DUT] RSS     q0=3  q1=0  q2=0  q3=1  mis=0  skip=2
-[NIC] rx=6  drop=0  byte_mis=0  csum_side=0  occ_max=1  mis=0
-[COV] size    runt=4  standard=2  jumbo=0  tcp SYN=3 ACK=0 FIN=0 RST=0  roce send=0 ack=0
+[DUT] CSUM     ok=3  err=0  skip=4  mis=0
+[DUT] RSS     q0=4  q1=0  q2=0  q3=1  mis=0  skip=2
+[NIC] rx=7  drop=0  byte_mis=0  csum_side=0  occ_max=1  mis=0
+[COV] size    runt=4  standard=3  jumbo=0  tcp SYN=4 ACK=0 FIN=0 RST=0  roce send=0 ack=0

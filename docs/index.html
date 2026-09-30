@@ -200,7 +200,7 @@
           <tr><td>make FILTER='udp'</td><td>streamed 0, skipped=1000 on a TCP-only capture</td></tr>
           <tr><td>make PCAP=soft_roce.pcap MAX_PACKETS=8</td><td>roce=8 msg=1 ack=1 icrc ok=8</td></tr>
           <tr><td>make PCAP=soft_roce.pcap MAX_PACKETS=16</td><td>msg=3 ack=3, next Send continues PSN</td></tr>
-          <tr><td>python3 scripts/gen_pcap.py ci.pcap && make PCAP=ci.pcap BP=2</td><td>arp=1 vxlan=1 ipv6=1 vlan=1 CSUM mis=0, streamed 6</td></tr>
+          <tr><td>python3 scripts/gen_pcap.py ci.pcap && make PCAP=ci.pcap BP=2</td><td>arp=1 vxlan=1 ipv6=2 vlan=2 CSUM mis=0, streamed 7</td></tr>
         </tbody>
       </table>
     </div>

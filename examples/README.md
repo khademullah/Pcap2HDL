@@ -6,7 +6,7 @@ This directory is the compact record of what a green Pcap2HDL replay looks like.
 |------|---------|------|
 | `*.log` (this folder) | Yes (`!examples/*.log` in `.gitignore`) | DUT stdout with Verilator footers stripped |
 | `soft_roce_gtkwave.jpg` | Yes | GTKWave still of RoCE (`hdr_is_roce`, dest port `0x12b7`) |
-| `traffic.pcap`, `soft_roce.pcap`, `ns1_iperf6.pcap`, `ns1_vlan100.pcap`, `ci.pcap` | No | Local captures / generated CI file |
+| `traffic.pcap`, `soft_roce.pcap`, `ns1_iperf6.pcap`, `ns1_vlan100.pcap`, `ns1_vlan100_ip6.pcap`, `ci.pcap` | No | Local captures / generated CI file |
 | `simulation_trace.vcd` | No | Last `make` dump; open with `make wave` |
 
 Regenerate a log by running the command in the first line of that file (`$ make …`), then copy `simulation.log` (drop lines from `Verilog $finish` onward). Do not commit `.pcap` files.
@@ -18,7 +18,7 @@ Regenerate a log by running the command in the first line of that file (`$ make 
 | [traffic_8pkt.log](traffic_8pkt.log) | `make MAX_PACKETS=8` | `ipv4=8 ipv6=0 tcp=8 hs=1 seq_ok=5 seq_err=0` `CSUM ok=8 mis=0` `RSS mis=0` `[NIC] off` |
 | [soft_roce_8pkt.log](soft_roce_8pkt.log) | `make PCAP=soft_roce.pcap MAX_PACKETS=8` | `roce=8 msg=1 ack=1 psn_gap=0 icrc ok=8` `CSUM mis=0` |
 | [soft_roce_16pkt.log](soft_roce_16pkt.log) | `make PCAP=soft_roce.pcap MAX_PACKETS=16` | `roce=16 msg=3 ack=3 icrc ok=16` |
-| [ci_nic.log](ci_nic.log) | `python3 scripts/gen_pcap.py ci.pcap && make NIC=1 PCAP=ci.pcap MAX_PACKETS=8 BP=2` | streamed 6; `arp=1 vxlan=1 ipv6=1 vlan=1 trunc=1` `CSUM mis=0` `RSS mis=0` `[NIC] rx=6 mis=0` |
+| [ci_nic.log](ci_nic.log) | `python3 scripts/gen_pcap.py ci.pcap && make NIC=1 PCAP=ci.pcap MAX_PACKETS=8 BP=2` | streamed 7; `arp=1 vxlan=1 ipv6=2 vlan=2 trunc=1` `CSUM mis=0` `RSS mis=0` `[NIC] rx=7 mis=0` |
 | [ipv6_20pkt.log](ipv6_20pkt.log) | `make NIC=1 PCAP=ns1_iperf6.pcap MAX_PACKETS=20` | `ipv6=20 tcp=17 hs=2 seq_ok=11 seq_err=0` `CSUM skip=20 mis=0` `RSS mis=0` `[NIC] rx=20` |
 | [soft_roce_gtkwave.jpg](soft_roce_gtkwave.jpg) | `make PCAP=soft_roce.pcap MAX_PACKETS=8` then `make wave` | `hdr_is_roce`, UDP dest `0x12b7` (4791) |
 | [../docs/wireshark_replay.png](../docs/wireshark_replay.png) | `make DUMP=replay.pcap` then open `replay.pcap` | Same Ethernet frames the AXIS master accepted |
@@ -40,6 +40,7 @@ Related commands (no dedicated log file; gates must match the parent capture):
 | `make FILTER='udp'` | See [bpf_udp.log](bpf_udp.log) |
 | `make PCAP=soft_roce.pcap FILTER='udp port 4791'` | Keep RoCE, drop other UDP/TCP |
 | `make NIC=1 PCAP=ns1_vlan100.pcap MAX_PACKETS=20` | Local 802.1Q IPv4 iperf; dump parent veth (see below) |
+| `make NIC=1 PCAP=ns1_vlan100_ip6.pcap MAX_PACKETS=20` | Local 802.1Q IPv6 iperf; same parent dump (`ether proto 0x8100`) |
 | `make PCAP=replay.pcap` | Replay a `DUMP=` file; DUT summary must match the dump source |
 
 ## How to read a log line
@@ -110,7 +111,7 @@ RSS in this capture stays on `q=1` for all hashed frames (`q1=8` / `q1=16`). IPv
 
 GTKWave: [soft_roce_gtkwave.jpg](soft_roce_gtkwave.jpg) — add `hdr_is_roce`, `dst_port`, `bth_psn`, `icrc_ok`.
 
-## `ci_nic.log` — synthetic six-frame CI pcap
+## `ci_nic.log` — synthetic seven-frame CI pcap
 
 `scripts/gen_pcap.py` (Python stdlib, no Scapy) writes, in order:
 
@@ -120,10 +121,11 @@ GTKWave: [soft_roce_gtkwave.jpg](soft_roce_gtkwave.jpg) — add `hdr_is_roce`, `
 4. **Runt** 19-byte IPv4-looking stub → `TRUNC`, `LEN_MISMATCH` (`captured=19` vs garbage `14+iplen`). Expected: `trunc=1`, `mismatch=1`.
 5. **IPv6 TCP SYN** EtherType `0x86dd`, `fd00::1:34612` → `fd00::2:5201`, `iplen=60`, `hop=64`, `RSS q=0 hash=fca58788`, `SYN_OK`. No `[CSUM]` line.
 6. **802.1Q IPv4 TCP SYN** outer `0x8100`, VID 100, same 4-tuple as frame 2, L3 at byte 18 → `[HDR] ... VLAN vid=100  IPv4 ...`, `[CSUM] ffff OK`, same RSS hash as the untagged SYN.
+7. **802.1Q IPv6 TCP SYN** outer `0x8100`, VID 100, inner `0x86dd`, same 4-tuple as frame 5 → `[HDR] ... VLAN vid=100  IPv6 ...`, same RSS hash as the untagged IPv6 SYN, `CSUM skip`.
 
-`BP=2` is in the log header (`extra random tready`). Counts must match `BP=0`. `[NIC] rx=6 drop=0 byte_mis=0 mis=0`. `CSUM skip=3` = ARP + trunc + IPv6. `RSS skip=2` = ARP + trunc. GitHub Actions greps `Streamed 6 packets`, `ipv6=1`, `vlan=1`, `arp=1`, `vxlan=1`, `mis=0`.
+`BP=2` is in the log header (`extra random tready`). Counts must match `BP=0`. `[NIC] rx=7 drop=0 byte_mis=0 mis=0`. `CSUM skip=4` = ARP + trunc + two IPv6. `RSS skip=2` = ARP + trunc. GitHub Actions greps `Streamed 7 packets`, `ipv6=2`, `vlan=2`, `arp=1`, `vxlan=1`, `mis=0`.
 
-`tcp=3` is the two IPv4 SYNs (untagged + VLAN) plus the IPv6 SYN. `ipv4=3` is those two IPv4 SYNs plus VXLAN outer IPv4 (VXLAN is not counted as `udp` in the header bins because it is classified VXLAN).
+`tcp=4` is the two IPv4 SYNs plus the two IPv6 SYNs. `ipv4=3` is those two IPv4 SYNs plus VXLAN outer IPv4 (VXLAN is not counted as `udp` in the header bins because it is classified VXLAN).
 
 ## `ipv6_20pkt.log` — IPv6 iperf (`ns1_iperf6.pcap`)
 
@@ -193,7 +195,7 @@ make wave
 
 Expect `[HDR] ... etype=0x8100  VLAN vid=100  IPv4 ...`, `[CSUM] ffff OK` on TCP, `vlan=` equal to tagged frames, `CSUM mis=0` `RSS mis=0`. GTKWave: `u_snoop` / `u_parser` → `is_vlan`, `vlan_id`.
 
-IPv6 on the same VID (parser walks L3 at 18; not the CI focus):
+IPv6 on the same VID (CI frame 7 is a tagged IPv6 SYN; this capture is the live iperf path):
 
 ```bash
 sudo ip netns exec ns1 ip -6 addr add fd00:100::1/64 dev veth1.100
@@ -202,6 +204,15 @@ sudo ip netns exec ns2 iperf3 -s -6 -B fd00:100::2 -p 5201
 sudo ip netns exec ns1 iperf3 -c fd00:100::2 -B fd00:100::1 -6 -p 5201 -t 8
 sudo ip netns exec ns1 tcpdump -i veth1 ether proto 0x8100 -c 1000 -w ns1_vlan100_ip6.pcap
 ```
+
+Replay:
+
+```bash
+make NIC=1 PCAP=ns1_vlan100_ip6.pcap MAX_PACKETS=20
+make wave
+```
+
+Expect `[HDR] ... etype=0x8100  VLAN vid=100  IPv6 ...`, `CSUM skip` on those frames, `RSS mis=0`. CI synthetic tagged IPv6 SYN is frame 7 of [ci_nic.log](ci_nic.log) (`hash=fca58788`, same as untagged IPv6 SYN).
 
 ## Bring your own NIC
 
@@ -232,6 +243,7 @@ python3 scripts/gen_pcap.py ci.pcap
 make NIC=1 PCAP=ci.pcap MAX_PACKETS=8 BP=2
 make NIC=1 PCAP=ns1_iperf6.pcap MAX_PACKETS=20
 make NIC=1 PCAP=ns1_vlan100.pcap MAX_PACKETS=20
+make NIC=1 PCAP=ns1_vlan100_ip6.pcap MAX_PACKETS=20
 make wave
 make clean
 ```

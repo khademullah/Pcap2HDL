@@ -20,14 +20,14 @@ jobs:
       - name: Replay
         run: make NIC=1 PCAP=ci.pcap MAX_PACKETS=8 BP=2
       - name: Random BP must not drop frames
-        run: grep -q "Streamed 6 packets" simulation.log
+        run: grep -q "Streamed 7 packets" simulation.log
       - name: NIC RX slave accepted the same frames
-        run: grep -q "\\[NIC\\] rx=6  drop=0  byte_mis=0" simulation.log
+        run: grep -q "\\[NIC\\] rx=7  drop=0  byte_mis=0" simulation.log
       - name: ARP / VXLAN / IPv6 / VLAN / checksum
         run: |
           grep -q "arp=1" simulation.log
           grep -q "vxlan=1" simulation.log
-          grep -q "ipv6=1" simulation.log
-          grep -q "vlan=1" simulation.log
+          grep -q "ipv6=2" simulation.log
+          grep -q "vlan=2" simulation.log
           grep -q "CSUM     ok=" simulation.log
           grep -q "mis=0" simulation.log

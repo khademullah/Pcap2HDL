@@ -4,7 +4,7 @@
 
 IPv6 base header (EtherType 0x86dd, no extension headers): classify TCP/UDP, RSS Toeplitz 4-tuple, TCP tracker on 128-bit addresses. IPv6 has no IPv4 header checksum (`CSUM skip`).
 
-Single 802.1Q tag (EtherType `0x8100`): L3 at byte 18, `is_vlan` / `vlan_id`, IPv4 checksum and RSS skip the tag. QinQ and VLAN+IPv6-as-focus still later; tagged IPv6 uses the same L3 offset. Untagged `traffic.pcap` / `soft_roce.pcap` must stay green. CI `ci.pcap` is six frames (`vlan=1`).
+Single 802.1Q tag (EtherType `0x8100`): L3 at byte 18, `is_vlan` / `vlan_id`. IPv4 checksum and RSS skip the tag. Tagged IPv6 uses the same window (CI seventh frame). QinQ still parked. Untagged `traffic.pcap` / `soft_roce.pcap` must stay green. CI `ci.pcap` is seven frames (`vlan=2 ipv6=2`).
 
 ## 0.4.0
 

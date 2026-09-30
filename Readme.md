@@ -45,7 +45,7 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 | `docs/` | Capture notes, stills, GitHub Pages (`index.html`) |
 | `examples/` | Reference simulation logs |
 | `scripts/soft_roce_veth.sh` | veth + RXE + `ibv_rc_pingpong` capture helper |
-| `scripts/gen_pcap.py` | Tiny ARP/TCP/VXLAN/runt/IPv6/802.1Q pcap (stdlib) |
+| `scripts/gen_pcap.py` | Tiny ARP/TCP/VXLAN/runt/IPv6/802.1Q IPv4+IPv6 pcap (stdlib) |
 | `.github/workflows/ci.yml` | Generate `ci.pcap` and `make BP=2` |
 
 ## Data path

@@ -2,9 +2,41 @@
 
 ## Unreleased
 
-IPv6 base header (EtherType 0x86dd, no extension headers): classify TCP/UDP, RSS Toeplitz 4-tuple, TCP tracker on 128-bit addresses. IPv6 has no IPv4 header checksum (`CSUM skip`).
+## 0.6.0
 
-Single 802.1Q tag (EtherType `0x8100`): L3 at byte 18, `is_vlan` / `vlan_id`. IPv4 checksum and RSS skip the tag. Tagged IPv6 uses the same window (CI seventh frame). QinQ still parked. Untagged `traffic.pcap` / `soft_roce.pcap` must stay green. CI `ci.pcap` is seven frames (`vlan=2 ipv6=2`).
+Single 802.1Q tag on the replay path: IPv4 and IPv6 after EtherType `0x8100`.
+
+Headline: L3 starts at byte 18 when a tag is present; untagged `traffic.pcap` / `soft_roce.pcap` stay green. `v0.5.0` remains the IPv6-only cut (do not move that tag).
+
+### DUT / DPI-C
+
+- `pkt_header_parser`: outer type `0x8100`, VID in `vlan_id`, inner type at bytes 16–17. IPv4 and IPv6 fields are relative to L3 (14 or 18). QinQ (`0x88a8` / stacked tags) is not handled.
+- `pkt_ip_csum` and `dpi/pcap_reader.c` skip the four-byte tag before the IPv4 header fold. Tagged IPv6 still `CSUM skip`.
+- RSS Toeplitz uses the same inner 4-tuple as the untagged twin (`mis=0`). CI: tagged IPv4 SYN hash matches untagged IPv4; tagged IPv6 matches untagged IPv6.
+
+### Tooling
+
+- `scripts/gen_pcap.py`: seven frames (ARP, IPv4 SYN, VXLAN, runt, IPv6 SYN, 802.1Q IPv4 SYN, 802.1Q IPv6 SYN).
+- CI greps `Streamed 7 packets`, `ipv6=2`, `vlan=2`, `[NIC] rx=7`.
+- Capture notes: dump the **parent** veth (`ether proto 0x8100`), not `veth.100`. Commands in `examples/README.md`.
+
+### How to check
+
+```bash
+python3 scripts/gen_pcap.py ci.pcap
+make NIC=1 PCAP=ci.pcap MAX_PACKETS=8 BP=2   # vlan=2 ipv6=2 streamed 7; CSUM/RSS mis=0
+make MAX_PACKETS=8                            # untagged: ipv4=8 tcp=8 hs=1 seq_ok=5
+make NIC=1 PCAP=ns1_vlan100.pcap MAX_PACKETS=20
+make NIC=1 PCAP=ns1_vlan100_ip6.pcap MAX_PACKETS=20
+```
+
+### Not in this release
+
+QinQ, IPv6 extension headers, Ethernet FCS, live capture, host CSR map.
+
+## 0.5.0
+
+IPv6 base header (EtherType 0x86dd, no extension headers): classify TCP/UDP, RSS Toeplitz 4-tuple, TCP tracker on 128-bit addresses. IPv6 has no IPv4 header checksum (`CSUM skip`). Tag `v0.5.0` points at that cut, before 802.1Q.
 
 ## 0.4.0
 

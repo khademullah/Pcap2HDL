@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Pcap2HDL — packet traces to HDL simulation</title>
-  <meta name="description" content="Replay Ethernet pcaps into Verilator through DPI-C. 0.4.0: Bring your own NIC, C vs HDL checksum, ARP/VXLAN.">
+  <meta name="description" content="Replay Ethernet pcaps into Verilator through DPI-C. 0.6.0: IPv6 base header and 802.1Q; 0.4.0 Bring your own NIC.">
   <link rel="icon" href="pcap2hdl-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -38,7 +38,7 @@
     <div class="hero-grid">
       <div>
         <img class="hero-mark" src="pcap2hdl-logo-hero.png" alt="Pcap2HDL — Packet traces to HDL simulation">
-        <p class="kicker">Release 0.4.0</p>
+        <p class="kicker">Release 0.6.0</p>
         <h1>Packet traces to cycle-accurate HDL</h1>
         <p class="lede">
           Stream a captured <code>.pcap</code>
@@ -51,7 +51,7 @@
           <a class="btn btn-ghost" href="nic.html">Bring your own NIC</a>
           <a class="btn btn-ghost" href="#demo">Watch demo</a>
         </div>
-        <p class="meta">0.4.0 · Bring your own NIC · MIT · Linux / Verilator 5.032+</p>
+        <p class="meta">0.6.0 · IPv6 and 802.1Q · MIT · Linux / Verilator 5.032+</p>
       </div>
       <aside class="hero-panel">
         <h2>Data path</h2>
@@ -254,7 +254,7 @@ make AXIS_W=64 PCAP=soft_roce.pcap</pre>
             <li>Replacing the DPI-C bench with a UVM environment</li>
             <li>A GUI around the simulator</li>
           </ul>
-          <p class="note">0.4.0 landed: Bring your own NIC (<code>make NIC=1</code>), IPv4 checksum scoreboard, ARP/VXLAN, random <code>BP=2</code>, <code>scripts/gen_pcap.py</code>, GitHub Actions.</p>
+          <p class="note">0.6.0: IPv6 base header and single 802.1Q. 0.4.0: Bring your own NIC (<code>make NIC=1</code>), IPv4 checksum, ARP/VXLAN, <code>BP=2</code>, GitHub Actions.</p>
         </article>
       </div>
       <div class="cta gap">
@@ -289,7 +289,7 @@ make AXIS_W=64 PCAP=soft_roce.pcap</pre>
 
   <footer class="foot">
     <div class="wrap foot-inner">
-      <span>Pcap2HDL 0.4.0 · MIT · GitHub Pages from <code>docs/</code></span>
+      <span>Pcap2HDL 0.6.0 · MIT · GitHub Pages from <code>docs/</code></span>
       <span>No capture files are published on this site.</span>
     </div>
   </footer>

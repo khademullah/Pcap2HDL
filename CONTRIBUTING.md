@@ -28,7 +28,7 @@ Then open a PR on GitHub. Keep gates green (`make MAX_PACKETS=8`, RoCE if you to
 
 ## Parked work (good first PRs)
 
-See Status in [Readme.md](Readme.md) and “Not in this release” under 0.4.0 in [CHANGELOG.md](CHANGELOG.md).
+See Status in [Readme.md](Readme.md) and “Not in this release” under 0.6.0 in [CHANGELOG.md](CHANGELOG.md).
 
 1. **IPv6 extension headers** — base header (0x86dd) is in. Hop-by-hop / fragment / routing still skip L4. Keep IPv4 gates green.
 2. **QinQ / stacked tags** — single 802.1Q (`0x8100`, L3 at 18, IPv4 and IPv6) is in. Do not break untagged `traffic.pcap` / `soft_roce.pcap`.

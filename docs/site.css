@@ -344,6 +344,45 @@ pre.mermaid {
   padding: 2rem 0 2.4rem;
   font-size: 0.92rem;
 }
+.contact {
+  margin-bottom: 1.6rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+.contact h2 {
+  margin: 0 0 0.35rem;
+  color: #fff;
+  font-size: 1.15rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.contact-lead {
+  margin: 0 0 0.85rem;
+  color: #9bb0c4;
+  max-width: 40rem;
+}
+.contact-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: #9ee0d8;
+  text-decoration: none;
+  font-weight: 600;
+}
+.contact-link:hover { color: #fff; text-decoration: none; }
+.foot .contact-link:hover { text-decoration: none; }
+.contact-link:hover .li-icon { background: #0a66c2; }
+.li-icon {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  background: #0a66c2;
+  color: #fff;
+  padding: 5px;
+  box-sizing: border-box;
+}
+.li-icon path { fill: currentColor; }
 .foot code {
   background: transparent;
   color: #9bb0c4;

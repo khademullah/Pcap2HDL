@@ -87,6 +87,7 @@ make BP=2                         # extra random tready AND-ed with the slave
 make NIC_PAUSE=1                  # slave toggles its own tready (BP=0 still)
 python3 scripts/gen_pcap.py ci.pcap
 make PCAP=ci.pcap MAX_PACKETS=8 BP=2
+make NIC=1 PCAP=ns1_iperf6.pcap MAX_PACKETS=20   # local IPv6 iperf; not in git
 make AXIS_W=64                    # 8-byte AXI-Stream beats
 make DUMP=replay.pcap             # write the bus back to a pcap
 make FILTER='tcp port 5201'       # libpcap BPF; HDL only sees matches

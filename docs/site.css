@@ -365,24 +365,25 @@ pre.mermaid {
   display: inline-flex;
   align-items: center;
   gap: 0.55rem;
+  width: auto;
+  max-width: 100%;
   color: #9ee0d8;
   text-decoration: none;
   font-weight: 600;
 }
 .contact-link:hover { color: #fff; text-decoration: none; }
 .foot .contact-link:hover { text-decoration: none; }
-.contact-link:hover .li-icon { background: #0a66c2; }
-.li-icon {
+img.li-icon {
+  display: block;
   width: 28px;
   height: 28px;
-  flex-shrink: 0;
+  min-width: 28px;
+  min-height: 28px;
+  max-width: 28px;
+  max-height: 28px;
+  flex: 0 0 28px;
   border-radius: 4px;
-  background: #0a66c2;
-  color: #fff;
-  padding: 5px;
-  box-sizing: border-box;
 }
-.li-icon path { fill: currentColor; }
 .foot code {
   background: transparent;
   color: #9bb0c4;
@@ -494,6 +495,12 @@ pre.mermaid {
   display: block;
   width: 100%;
   height: auto;
+}
+footer svg,
+.contact svg {
+  width: 28px;
+  height: 28px;
+  max-width: 28px;
 }
 .flow-chart figcaption {
   margin: 0.4rem 0 0.7rem;

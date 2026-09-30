@@ -45,7 +45,7 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 | `docs/` | Capture notes, stills, GitHub Pages (`index.html`) |
 | `examples/` | Reference simulation logs |
 | `scripts/soft_roce_veth.sh` | veth + RXE + `ibv_rc_pingpong` capture helper |
-| `scripts/gen_pcap.py` | Tiny ARP/TCP/VXLAN/runt pcap (stdlib) |
+| `scripts/gen_pcap.py` | Tiny ARP/TCP/VXLAN/runt/IPv6/802.1Q pcap (stdlib) |
 | `.github/workflows/ci.yml` | Generate `ci.pcap` and `make BP=2` |
 
 ## Data path
@@ -64,7 +64,7 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 2. Packets are replayed up to `+MAX_PACKETS=` (default 100). After each `fetch_next_packet()`, `get_wire_len()` / `get_ts_sec()` / `get_ts_usec()` expose the pcap header (on-wire length vs stored `caplen`, capture timestamp).
 3. Bytes are updated on the clock negedge and sampled on posedge when `tvalid && tready`. Default `make` uses bench `BP` as `tready`. `make NIC=1` compiles `nic_rx`: it drives `s_tready` (credits, optional `NIC_PAUSE`) AND `ready_mask` (`BP`). With `AXIS_W=64`, up to eight bytes share a beat. The master holds `tvalid` until the handshake.
 4. `pkt_size_filter` counts `tkeep` bits and pulses `pkt_done` with length class.
-5. `pkt_header_parser` latches MAC, EtherType, IPv4 (TTL, total length), L4 ports, TCP sequence/flags, RoCE BTH, ARP (`0x0806`), and VXLAN (UDP/4789, inner Ethernet, VNI).
+5. `pkt_header_parser` latches MAC, EtherType, optional 802.1Q (`0x8100`, VID, L3 at 18), IPv4 (TTL, total length), L4 ports, TCP sequence/flags, RoCE BTH, ARP (`0x0806`), and VXLAN (UDP/4789, inner Ethernet, VNI).
 6. `pkt_roce_tracker` follows Send First/Middle/Last PSN per `{src,dst,qp}` and matches the reverse-direction ACK.
 7. `pkt_tcp_tracker` follows SYN / SYN-ACK / ACK (`HS_DONE`) and then next expected seq from TCP payload length.
 8. `pkt_roce_icrc` checks the last 4 bytes of a complete RoCEv2 frame (masked CRC32). Truncated captures are skipped.
@@ -140,7 +140,7 @@ One `[HDR]` line is printed when headers are valid (after L4 ports for TCP/UDP).
 ...
 [TCP] SEQ_OK
 ...
-[DUT] Header  ipv4=8  ipv6=0  tcp=8  udp=0  roce=0  arp=0  vxlan=0  other=0  trunc=0
+[DUT] Header  ipv4=8  ipv6=0  vlan=0  tcp=8  udp=0  roce=0  arp=0  vxlan=0  other=0  trunc=0
 [DUT] TCP     hs=1  fin=0  rst=0  seq_ok=5  seq_err=0  op_err=0
 [DUT] Length  mismatch=0
 [DUT] CSUM     ok=8  err=0  skip=0  mis=0
@@ -206,7 +206,7 @@ make PCAP=soft_roce.pcap FILTER='udp port 4791'
 [HDR] ... ROCE ACK ...
 [TRK] ACK_OK
 [DUT] ICRC  dabe7a49 OK
-[DUT] Header  ipv4=8  ipv6=0  tcp=0  udp=0  roce=8  arp=0  vxlan=0  other=0  trunc=0
+[DUT] Header  ipv4=8  ipv6=0  vlan=0  tcp=0  udp=0  roce=8  arp=0  vxlan=0  other=0  trunc=0
 [DUT] Tracker msg=1  ack=1  psn_err=0  op_err=0  psn_gap=0
 [DUT] ICRC    ok=8  err=0  skip=0
 [DUT] CSUM     ok=8  err=0  skip=0  mis=0
@@ -232,7 +232,7 @@ UDP/4791 frames are tagged `ROCE` with BTH opcode, dest QP, and PSN. The tracker
 [DUT] Classified packet: 62 bytes ->     RUNT
 [DUT] ICRC  dabe7a49 OK
 ...
-[DUT] Header  ipv4=8  ipv6=0  tcp=0  udp=0  roce=8  arp=0  vxlan=0  other=0  trunc=0
+[DUT] Header  ipv4=8  ipv6=0  vlan=0  tcp=0  udp=0  roce=8  arp=0  vxlan=0  other=0  trunc=0
 [DUT] Tracker msg=1  ack=1  psn_err=0  op_err=0  psn_gap=0
 [DUT] Length  mismatch=0
 [DUT] ICRC    ok=8  err=0  skip=0
@@ -259,7 +259,7 @@ make NIC=1 PCAP=ns1_iperf6.pcap MAX_PACKETS=20
 ...
 [TCP] HS_DONE
 ...
-[DUT] Header  ipv4=0  ipv6=20  tcp=17  udp=0  roce=0  arp=0  vxlan=0  other=0  trunc=0
+[DUT] Header  ipv4=0  ipv6=20  vlan=0  tcp=17  udp=0  roce=0  arp=0  vxlan=0  other=0  trunc=0
 [DUT] TCP     hs=2  fin=0  rst=0  seq_ok=11  seq_err=0  op_err=0
 [DUT] CSUM     ok=0  err=0  skip=20  mis=0
 [DUT] RSS     ...  mis=0  skip=0
@@ -273,8 +273,8 @@ Packets 1–3 are ICMPv6 (multicast, hop 255). Two iperf TCP sessions (`44432` a
 - Environment: DPI-C pcap stream into Verilator (bytes, wire length, timestamp, DLT)
 - Control: packet cap and clean exit
 - Size filter: runt / standard / jumbo (`tkeep` popcount)
-- L2/L3: MAC, EtherType, IPv4 TTL and total length (LEN_MISMATCH vs captured); IPv6 base header (hop limit, payload+40 as iplen; no extension headers)
-- IPv4 checksum: RFC 1071 in C and HDL (`CSUM mis=0`); `tuser_err` is fail sideband. IPv6 has no header checksum (`skip`).
+- L2/L3: MAC, EtherType, one 802.1Q tag (`0x8100`, VID, L3 at 18); IPv4 TTL and total length (LEN_MISMATCH vs captured); IPv6 base header (hop limit, payload+40 as iplen; no extension headers)
+- IPv4 checksum: RFC 1071 in C and HDL (`CSUM mis=0`), including after a VLAN tag; `tuser_err` is fail sideband. IPv6 has no header checksum (`skip`).
 - L4: TCP/UDP ports; TCP flags, seq, ack
 - RoCEv2 BTH: opcode, dest QP, PSN, P_Key, AckReq
 - RoCEv2 ICRC: last 4 bytes checked; truncated captures skipped
@@ -285,7 +285,7 @@ Packets 1–3 are ICMPv6 (multicast, hop 255). Two iperf TCP sessions (`44432` a
 - Bring your own NIC: optional `nic_rx` AXIS slave (`make NIC=1`); observers under `u_snoop`
 - Coverage print `[COV]` size / TCP flags / RoCE opcodes. CI: `.github/workflows/ci.yml` + `scripts/gen_pcap.py`
 
-Still parked: VLAN, IPv6 extension headers. See [CHANGELOG.md](CHANGELOG.md). How to contribute: [CONTRIBUTING.md](CONTRIBUTING.md).
+Still parked: QinQ, IPv6 extension headers. See [CHANGELOG.md](CHANGELOG.md). How to contribute: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

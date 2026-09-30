@@ -148,10 +148,28 @@ static unsigned int rss_toeplitz(const unsigned char *in, int nbytes)
     return hash;
 }
 
+/* One 802.1Q tag (0x8100). QinQ is not handled. L3 offset 14 or 18. */
+static int eth_l3(int cap, unsigned *et)
+{
+    unsigned outer;
+
+    if (cap < 14)
+        return -1;
+    outer = ((unsigned)packet_data[12] << 8) | packet_data[13];
+    if (outer == 0x8100u) {
+        if (cap < 18)
+            return -1;
+        *et = ((unsigned)packet_data[16] << 8) | packet_data[17];
+        return 18;
+    }
+    *et = outer;
+    return 14;
+}
+
 static void compute_rss(void)
 {
     unsigned char in[36];
-    int ihl, l4, cap, i;
+    int ihl, l4, cap, i, l3;
     unsigned et, nh;
 
     rss_valid = 0;
@@ -159,18 +177,18 @@ static void compute_rss(void)
     if (!packet_data)
         return;
     cap = (int)header.caplen;
-    if (cap < 34)
+    l3 = eth_l3(cap, &et);
+    if (l3 < 0)
         return;
-    et = ((unsigned)packet_data[12] << 8) | packet_data[13];
     if (et == 0x86ddu) {
-        if (cap < 54)
+        if (cap < l3 + 40)
             return;
-        nh = packet_data[20];
+        nh = packet_data[l3 + 6];
         for (i = 0; i < 16; i++) {
-            in[i]      = packet_data[22 + i];
-            in[16 + i] = packet_data[38 + i];
+            in[i]      = packet_data[l3 + 8 + i];
+            in[16 + i] = packet_data[l3 + 24 + i];
         }
-        l4 = 54;
+        l4 = l3 + 40;
         if ((nh == 6 || nh == 17) && cap >= l4 + 4) {
             in[32] = packet_data[l4];
             in[33] = packet_data[l4 + 1];
@@ -185,19 +203,21 @@ static void compute_rss(void)
     }
     if (et != 0x0800)
         return;
-    ihl = packet_data[14] & 0x0f;
+    if (cap < l3 + 20)
+        return;
+    ihl = packet_data[l3] & 0x0f;
     if (ihl < 5)
         return;
-    l4 = 14 + ihl * 4;
-    in[0] = packet_data[26];
-    in[1] = packet_data[27];
-    in[2] = packet_data[28];
-    in[3] = packet_data[29];
-    in[4] = packet_data[30];
-    in[5] = packet_data[31];
-    in[6] = packet_data[32];
-    in[7] = packet_data[33];
-    if ((packet_data[23] == 6 || packet_data[23] == 17) && cap >= l4 + 4) {
+    l4 = l3 + ihl * 4;
+    in[0] = packet_data[l3 + 12];
+    in[1] = packet_data[l3 + 13];
+    in[2] = packet_data[l3 + 14];
+    in[3] = packet_data[l3 + 15];
+    in[4] = packet_data[l3 + 16];
+    in[5] = packet_data[l3 + 17];
+    in[6] = packet_data[l3 + 18];
+    in[7] = packet_data[l3 + 19];
+    if ((packet_data[l3 + 9] == 6 || packet_data[l3 + 9] == 17) && cap >= l4 + 4) {
         in[8]  = packet_data[l4];
         in[9]  = packet_data[l4 + 1];
         in[10] = packet_data[l4 + 2];
@@ -239,7 +259,7 @@ static unsigned ip_csum_fold(const unsigned char *p, int n)
 
 static void compute_ip_csum(void)
 {
-    int cap, ihl, n;
+    int cap, ihl, n, l3;
     unsigned et, folded;
 
     ip_csum_valid = 0;
@@ -248,18 +268,20 @@ static void compute_ip_csum(void)
     if (!packet_data)
         return;
     cap = (int)header.caplen;
-    if (cap < 34)
+    l3 = eth_l3(cap, &et);
+    if (l3 < 0)
         return;
-    et = ((unsigned)packet_data[12] << 8) | packet_data[13];
     if (et != 0x0800)
         return;
-    ihl = packet_data[14] & 0x0f;
+    if (cap < l3 + 20)
+        return;
+    ihl = packet_data[l3] & 0x0f;
     if (ihl < 5)
         return;
     n = ihl * 4;
-    if (cap < 14 + n)
+    if (cap < l3 + n)
         return;
-    folded = ip_csum_fold(packet_data + 14, n);
+    folded = ip_csum_fold(packet_data + l3, n);
     ip_csum_val = folded;
     ip_csum_valid = 1;
     ip_csum_ok_f = (folded == 0xffff);

@@ -50,6 +50,8 @@ module tb_pcap_dpi #(
     wire        hdr_valid;
     wire        hdr_is_ipv4;
     wire        hdr_is_ipv6;
+    wire        hdr_is_vlan;
+    wire [11:0] vlan_id;
     wire        hdr_is_non_ipv4;
     wire        hdr_is_truncated;
     wire        hdr_is_tcp;
@@ -134,7 +136,7 @@ module tb_pcap_dpi #(
     int packet_count;
     int max_packets;
     int n_runt, n_standard, n_jumbo;
-    int n_ipv4, n_ipv6, n_non_ipv4, n_truncated;
+    int n_ipv4, n_ipv6, n_vlan, n_non_ipv4, n_truncated;
     int n_tcp, n_udp, n_roce;
     int n_msg, n_ack, n_psn_err, n_op_err;
     int n_hs, n_tcp_seq_ok, n_tcp_seq_err, n_tcp_op_err;
@@ -186,6 +188,13 @@ module tb_pcap_dpi #(
         endcase
     endfunction
 
+    function automatic string vlan_s();
+        if (hdr_is_vlan)
+            vlan_s = $sformatf("VLAN vid=%0d  ", vlan_id);
+        else
+            vlan_s = "";
+    endfunction
+
     function automatic string tcp_flagstr(input logic [7:0] f);
         tcp_flagstr = "";
         if (f[0]) tcp_flagstr = {tcp_flagstr, "FIN "};
@@ -219,6 +228,8 @@ module tb_pcap_dpi #(
         .hdr_valid(hdr_valid),
         .hdr_is_ipv4(hdr_is_ipv4),
         .hdr_is_ipv6(hdr_is_ipv6),
+        .hdr_is_vlan(hdr_is_vlan),
+        .vlan_id(vlan_id),
         .hdr_is_non_ipv4(hdr_is_non_ipv4),
         .hdr_is_truncated(hdr_is_truncated),
         .hdr_is_tcp(hdr_is_tcp),
@@ -367,8 +378,9 @@ module tb_pcap_dpi #(
     always @(posedge clk) begin
         if (rst_n && is_len_mismatch) begin
             n_len_mis = n_len_mis + 1;
-            $display("[DUT] LEN_MISMATCH  captured=%0d  expected=%0d (14+iplen)",
-                     pkt_bytes, 14 + ip_tot_len);
+            $display("[DUT] LEN_MISMATCH  captured=%0d  expected=%0d (%0d+iplen)",
+                     pkt_bytes, (hdr_is_vlan ? 16'd18 : 16'd14) + ip_tot_len,
+                     hdr_is_vlan ? 18 : 14);
         end
     end
 
@@ -434,6 +446,8 @@ module tb_pcap_dpi #(
                 n_ipv6 = n_ipv6 + 1;
             else
                 n_non_ipv4 = n_non_ipv4 + 1;
+            if (hdr_is_vlan)
+                n_vlan = n_vlan + 1;
             if (hdr_is_tcp)  n_tcp  = n_tcp + 1;
             if (hdr_is_udp)  n_udp  = n_udp + 1;
             if (hdr_is_roce) n_roce = n_roce + 1;
@@ -453,37 +467,37 @@ module tb_pcap_dpi #(
             end
 
             if (hdr_is_arp)
-                $display("[HDR] dst=%012h  src=%012h  etype=0x%04h  ARP",
-                         dst_mac, src_mac, ethertype);
+                $display("[HDR] dst=%012h  src=%012h  etype=0x%04h  %sARP",
+                         dst_mac, src_mac, ethertype, vlan_s());
             else if (hdr_is_vxlan)
-                $display("[HDR] dst=%012h  src=%012h  etype=0x%04h  IPv4 ttl=%0d iplen=%0d  %0d.%0d.%0d.%0d:%0d -> %0d.%0d.%0d.%0d:%0d  VXLAN vni=%0d",
-                         dst_mac, src_mac, ethertype, ip_ttl, ip_tot_len,
+                $display("[HDR] dst=%012h  src=%012h  etype=0x%04h  %sIPv4 ttl=%0d iplen=%0d  %0d.%0d.%0d.%0d:%0d -> %0d.%0d.%0d.%0d:%0d  VXLAN vni=%0d",
+                         dst_mac, src_mac, ethertype, vlan_s(), ip_ttl, ip_tot_len,
                          src_ip[31:24], src_ip[23:16], src_ip[15:8], src_ip[7:0], src_port,
                          dst_ip[31:24], dst_ip[23:16], dst_ip[15:8], dst_ip[7:0], dst_port,
                          vxlan_vni);
             else if (hdr_is_roce) begin
                 if (bth_ackreq)
-                    $display("[HDR] dst=%012h  src=%012h  etype=0x%04h  IPv4 ttl=%0d iplen=%0d  %0d.%0d.%0d.%0d:%0d -> %0d.%0d.%0d.%0d:%0d  ROCE %s qp=0x%0h psn=0x%0h pkey=0x%04h AckReq",
-                             dst_mac, src_mac, ethertype, ip_ttl, ip_tot_len,
+                    $display("[HDR] dst=%012h  src=%012h  etype=0x%04h  %sIPv4 ttl=%0d iplen=%0d  %0d.%0d.%0d.%0d:%0d -> %0d.%0d.%0d.%0d:%0d  ROCE %s qp=0x%0h psn=0x%0h pkey=0x%04h AckReq",
+                             dst_mac, src_mac, ethertype, vlan_s(), ip_ttl, ip_tot_len,
                              src_ip[31:24], src_ip[23:16], src_ip[15:8], src_ip[7:0], src_port,
                              dst_ip[31:24], dst_ip[23:16], dst_ip[15:8], dst_ip[7:0], dst_port,
                              bth_opname(bth_opcode), dest_qp, bth_psn, bth_pkey);
                 else
-                    $display("[HDR] dst=%012h  src=%012h  etype=0x%04h  IPv4 ttl=%0d iplen=%0d  %0d.%0d.%0d.%0d:%0d -> %0d.%0d.%0d.%0d:%0d  ROCE %s qp=0x%0h psn=0x%0h pkey=0x%04h",
-                             dst_mac, src_mac, ethertype, ip_ttl, ip_tot_len,
+                    $display("[HDR] dst=%012h  src=%012h  etype=0x%04h  %sIPv4 ttl=%0d iplen=%0d  %0d.%0d.%0d.%0d:%0d -> %0d.%0d.%0d.%0d:%0d  ROCE %s qp=0x%0h psn=0x%0h pkey=0x%04h",
+                             dst_mac, src_mac, ethertype, vlan_s(), ip_ttl, ip_tot_len,
                              src_ip[31:24], src_ip[23:16], src_ip[15:8], src_ip[7:0], src_port,
                              dst_ip[31:24], dst_ip[23:16], dst_ip[15:8], dst_ip[7:0], dst_port,
                              bth_opname(bth_opcode), dest_qp, bth_psn, bth_pkey);
             end else if (hdr_is_ipv6)
-                $display("[HDR] dst=%012h  src=%012h  etype=0x%04h      IPv6 hop=%0d iplen=%0d  %032h:%0d -> %032h:%0d  %s",
-                         dst_mac, src_mac, ethertype, ip_ttl, ip_tot_len,
+                $display("[HDR] dst=%012h  src=%012h  etype=0x%04h      %sIPv6 hop=%0d iplen=%0d  %032h:%0d -> %032h:%0d  %s",
+                         dst_mac, src_mac, ethertype, vlan_s(), ip_ttl, ip_tot_len,
                          src_ip6, src_port, dst_ip6, dst_port,
                          hdr_is_tcp ? $sformatf("TCP %s seq=0x%08h ack=0x%08h plen=%0d",
                                                 tcp_flagstr(tcp_flags), tcp_seq, tcp_ackn, tcp_plen) :
                          hdr_is_udp ? "UDP" : "");
             else
-                $display("[HDR] dst=%012h  src=%012h  etype=0x%04h  %s ttl=%0d iplen=%0d  %0d.%0d.%0d.%0d:%0d -> %0d.%0d.%0d.%0d:%0d  %s",
-                         dst_mac, src_mac, ethertype,
+                $display("[HDR] dst=%012h  src=%012h  etype=0x%04h  %s%s ttl=%0d iplen=%0d  %0d.%0d.%0d.%0d:%0d -> %0d.%0d.%0d.%0d:%0d  %s",
+                         dst_mac, src_mac, ethertype, vlan_s(),
                          hdr_is_truncated ? "TRUNC" : hdr_is_ipv4 ? "IPv4" : "NON-IPv4",
                          ip_ttl, ip_tot_len,
                          src_ip[31:24], src_ip[23:16], src_ip[15:8], src_ip[7:0], src_port,
@@ -570,6 +584,7 @@ module tb_pcap_dpi #(
         n_jumbo = 0;
         n_ipv4 = 0;
         n_ipv6 = 0;
+        n_vlan = 0;
         n_non_ipv4 = 0;
         n_truncated = 0;
         n_tcp = 0;
@@ -771,8 +786,8 @@ module tb_pcap_dpi #(
         $display("\n[SV] Simulation finished. File=%s  Streamed %0d packets.", pcap_name, packet_count);
         $display("[DUT] Size    runt=%0d  standard=%0d  jumbo=%0d",
                  n_runt, n_standard, n_jumbo);
-        $display("[DUT] Header  ipv4=%0d  ipv6=%0d  tcp=%0d  udp=%0d  roce=%0d  arp=%0d  vxlan=%0d  other=%0d  trunc=%0d",
-                 n_ipv4, n_ipv6, n_tcp, n_udp, n_roce, n_arp, n_vxlan, n_non_ipv4, n_truncated);
+        $display("[DUT] Header  ipv4=%0d  ipv6=%0d  vlan=%0d  tcp=%0d  udp=%0d  roce=%0d  arp=%0d  vxlan=%0d  other=%0d  trunc=%0d",
+                 n_ipv4, n_ipv6, n_vlan, n_tcp, n_udp, n_roce, n_arp, n_vxlan, n_non_ipv4, n_truncated);
         $display("[DUT] Tracker msg=%0d  ack=%0d  psn_err=%0d  op_err=%0d  psn_gap=%0d",
                  n_msg, n_ack, n_psn_err, n_op_err, n_psn_gap);
         $display("[DUT] TCP     hs=%0d  fin=%0d  rst=%0d  seq_ok=%0d  seq_err=%0d  op_err=%0d",

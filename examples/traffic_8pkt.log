@@ -56,7 +56,7 @@ $ make MAX_PACKETS=8
 
 [SV] Simulation finished. File=traffic.pcap  Streamed 8 packets.
 [DUT] Size    runt=0  standard=8  jumbo=0
-[DUT] Header  ipv4=8  ipv6=0  tcp=8  udp=0  roce=0  arp=0  vxlan=0  other=0  trunc=0
+[DUT] Header  ipv4=8  ipv6=0  vlan=0  tcp=8  udp=0  roce=0  arp=0  vxlan=0  other=0  trunc=0
 [DUT] Tracker msg=0  ack=0  psn_err=0  op_err=0  psn_gap=0
 [DUT] TCP     hs=1  fin=0  rst=0  seq_ok=5  seq_err=0  op_err=0
 [DUT] Length  mismatch=0

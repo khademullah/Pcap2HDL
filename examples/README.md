@@ -6,7 +6,7 @@ This directory is the compact record of what a green Pcap2HDL replay looks like.
 |------|---------|------|
 | `*.log` (this folder) | Yes (`!examples/*.log` in `.gitignore`) | DUT stdout with Verilator footers stripped |
 | `soft_roce_gtkwave.jpg` | Yes | GTKWave still of RoCE (`hdr_is_roce`, dest port `0x12b7`) |
-| `traffic.pcap`, `soft_roce.pcap`, `ns1_iperf6.pcap`, `ci.pcap` | No | Local captures / generated CI file |
+| `traffic.pcap`, `soft_roce.pcap`, `ns1_iperf6.pcap`, `ns1_vlan100.pcap`, `ci.pcap` | No | Local captures / generated CI file |
 | `simulation_trace.vcd` | No | Last `make` dump; open with `make wave` |
 
 Regenerate a log by running the command in the first line of that file (`$ make …`), then copy `simulation.log` (drop lines from `Verilog $finish` onward). Do not commit `.pcap` files.
@@ -18,7 +18,7 @@ Regenerate a log by running the command in the first line of that file (`$ make 
 | [traffic_8pkt.log](traffic_8pkt.log) | `make MAX_PACKETS=8` | `ipv4=8 ipv6=0 tcp=8 hs=1 seq_ok=5 seq_err=0` `CSUM ok=8 mis=0` `RSS mis=0` `[NIC] off` |
 | [soft_roce_8pkt.log](soft_roce_8pkt.log) | `make PCAP=soft_roce.pcap MAX_PACKETS=8` | `roce=8 msg=1 ack=1 psn_gap=0 icrc ok=8` `CSUM mis=0` |
 | [soft_roce_16pkt.log](soft_roce_16pkt.log) | `make PCAP=soft_roce.pcap MAX_PACKETS=16` | `roce=16 msg=3 ack=3 icrc ok=16` |
-| [ci_nic.log](ci_nic.log) | `python3 scripts/gen_pcap.py ci.pcap && make NIC=1 PCAP=ci.pcap MAX_PACKETS=8 BP=2` | streamed 5; `arp=1 vxlan=1 ipv6=1 trunc=1` `CSUM mis=0` `RSS mis=0` `[NIC] rx=5 mis=0` |
+| [ci_nic.log](ci_nic.log) | `python3 scripts/gen_pcap.py ci.pcap && make NIC=1 PCAP=ci.pcap MAX_PACKETS=8 BP=2` | streamed 6; `arp=1 vxlan=1 ipv6=1 vlan=1 trunc=1` `CSUM mis=0` `RSS mis=0` `[NIC] rx=6 mis=0` |
 | [ipv6_20pkt.log](ipv6_20pkt.log) | `make NIC=1 PCAP=ns1_iperf6.pcap MAX_PACKETS=20` | `ipv6=20 tcp=17 hs=2 seq_ok=11 seq_err=0` `CSUM skip=20 mis=0` `RSS mis=0` `[NIC] rx=20` |
 | [soft_roce_gtkwave.jpg](soft_roce_gtkwave.jpg) | `make PCAP=soft_roce.pcap MAX_PACKETS=8` then `make wave` | `hdr_is_roce`, UDP dest `0x12b7` (4791) |
 | [../docs/wireshark_replay.png](../docs/wireshark_replay.png) | `make DUMP=replay.pcap` then open `replay.pcap` | Same Ethernet frames the AXIS master accepted |
@@ -39,6 +39,7 @@ Related commands (no dedicated log file; gates must match the parent capture):
 | `make FILTER='tcp port 5201'` | libpcap BPF; HDL only sees matches (`matched` / `skipped`) |
 | `make FILTER='udp'` | See [bpf_udp.log](bpf_udp.log) |
 | `make PCAP=soft_roce.pcap FILTER='udp port 4791'` | Keep RoCE, drop other UDP/TCP |
+| `make NIC=1 PCAP=ns1_vlan100.pcap MAX_PACKETS=20` | Local 802.1Q IPv4 iperf; dump parent veth (see below) |
 | `make PCAP=replay.pcap` | Replay a `DUMP=` file; DUT summary must match the dump source |
 
 ## How to read a log line
@@ -48,7 +49,7 @@ Related commands (no dedicated log file; gates must match the parent capture):
 | `[SV]` | Bench | File open, DLT, packet index, `caplen` vs wire length, timestamp, cap/EOF |
 | `[C-DPI]` | C | libpcap open, BPF install, `matched` / `skipped` at the end |
 | `[CSUM]` | After IPv4 header fold | `ffff OK` is RFC 1071 over the **whole** header (including the stored checksum field). IPv6 never prints this; those frames `skip`. |
-| `[HDR]` | `hdr_valid` | MACs, EtherType, L3/L4. IPv4 dotted quads; IPv6 32 hex digits (no colons). Ports `0` if next-header is not TCP/UDP (ICMPv6). |
+| `[HDR]` | `hdr_valid` | MACs, EtherType, L3/L4. Tagged frames: `VLAN vid=N` (outer type stays `0x8100`). IPv4 dotted quads; IPv6 32 hex digits (no colons). Ports `0` if next-header is not TCP/UDP (ICMPv6). |
 | `[RSS]` | After parse, hashed L3 | Queue `0..3` = hash % 4. `DPI=… MISMATCH` would increment `mis` (C vs HDL). Silent match is `q=N hash=…` only. |
 | `[TCP]` | TCP tracker event | `SYN_OK`, `SYNACK_OK`, `HS_DONE`, `SEQ_OK`, `SEQ_ERR`, `FIN_OK`, `RST_OK` |
 | `[TRK]` | RoCE tracker | `OK`, `MSG_DONE`, `ACK_OK`, `PSN_ERR`, `PSN_GAP` |
@@ -58,7 +59,7 @@ Related commands (no dedicated log file; gates must match the parent capture):
 
 **Size class** (`pkt_size_filter`, `tkeep` popcount): runt &lt; 64, standard 64–1518, jumbo above that. A 54-byte IPv4 TCP SYN is **runt** even though headers parsed; that is length, not a parse fail.
 
-**`iplen` vs frame length:** Ethernet 14 + IP total length. IPv4 total length is the IPv4 header field. IPv6 `iplen` in the log is **40 + payload length** so `14 + iplen` still equals the L3+L4 frame. Example: 94-byte IPv6 SYN → `iplen=80`.
+**`iplen` vs frame length:** Untagged Ethernet 14 + IP total length. One 802.1Q tag: **18** + IP. IPv4 total length is the IPv4 header field. IPv6 `iplen` in the log is **40 + payload length**. Example: 94-byte untagged IPv6 SYN → `iplen=80`.
 
 **`plen` on TCP:** TCP payload bytes used by the tracker for next-seq (`SEQ_OK`). Handshake ACKs have `plen=0`.
 
@@ -109,7 +110,7 @@ RSS in this capture stays on `q=1` for all hashed frames (`q1=8` / `q1=16`). IPv
 
 GTKWave: [soft_roce_gtkwave.jpg](soft_roce_gtkwave.jpg) — add `hdr_is_roce`, `dst_port`, `bth_psn`, `icrc_ok`.
 
-## `ci_nic.log` — synthetic five-frame CI pcap
+## `ci_nic.log` — synthetic six-frame CI pcap
 
 `scripts/gen_pcap.py` (Python stdlib, no Scapy) writes, in order:
 
@@ -118,10 +119,11 @@ GTKWave: [soft_roce_gtkwave.jpg](soft_roce_gtkwave.jpg) — add `hdr_is_roce`, `
 3. **VXLAN** UDP/4789, VNI 100, inner Ethernet → `STANDARD`, hashed as IPv4 UDP 4-tuple `q=3`.
 4. **Runt** 19-byte IPv4-looking stub → `TRUNC`, `LEN_MISMATCH` (`captured=19` vs garbage `14+iplen`). Expected: `trunc=1`, `mismatch=1`.
 5. **IPv6 TCP SYN** EtherType `0x86dd`, `fd00::1:34612` → `fd00::2:5201`, `iplen=60`, `hop=64`, `RSS q=0 hash=fca58788`, `SYN_OK`. No `[CSUM]` line.
+6. **802.1Q IPv4 TCP SYN** outer `0x8100`, VID 100, same 4-tuple as frame 2, L3 at byte 18 → `[HDR] ... VLAN vid=100  IPv4 ...`, `[CSUM] ffff OK`, same RSS hash as the untagged SYN.
 
-`BP=2` is in the log header (`extra random tready`). Counts must match `BP=0`. `[NIC] rx=5 drop=0 byte_mis=0 mis=0`. `CSUM skip=3` = ARP + trunc + IPv6. `RSS skip=2` = ARP + trunc. GitHub Actions greps `Streamed 5 packets`, `ipv6=1`, `arp=1`, `vxlan=1`, `mis=0`.
+`BP=2` is in the log header (`extra random tready`). Counts must match `BP=0`. `[NIC] rx=6 drop=0 byte_mis=0 mis=0`. `CSUM skip=3` = ARP + trunc + IPv6. `RSS skip=2` = ARP + trunc. GitHub Actions greps `Streamed 6 packets`, `ipv6=1`, `vlan=1`, `arp=1`, `vxlan=1`, `mis=0`.
 
-`tcp=2` is the IPv4 SYN plus the IPv6 SYN. `ipv4=2` is the IPv4 SYN plus VXLAN outer IPv4 (VXLAN is not counted as `udp` in the header bins because it is classified VXLAN).
+`tcp=3` is the two IPv4 SYNs (untagged + VLAN) plus the IPv6 SYN. `ipv4=3` is those two IPv4 SYNs plus VXLAN outer IPv4 (VXLAN is not counted as `udp` in the header bins because it is classified VXLAN).
 
 ## `ipv6_20pkt.log` — IPv6 iperf (`ns1_iperf6.pcap`)
 
@@ -153,7 +155,53 @@ Kernel drops in tcpdump (`packets dropped by kernel`) do not corrupt the 1000 st
 
 `CSUM skip=20`: IPv6 has no IPv4 header checksum. `RSS mis=0`. `[NIC] rx=20`. GTKWave: `u_snoop` / `u_parser` → `hdr_is_ipv6`, `src_ip6`, `dst_ip6` (128-bit hex). Keep `MAX_PACKETS` small; a 1000-packet VCD is large.
 
-Parser scope: **40-byte IPv6 base header only**. Hop-by-hop, routing, and fragment headers still leave L4 at the wrong offset (parked). VLAN `0x8100` is also parked.
+Parser scope: **40-byte IPv6 base header only**. Hop-by-hop, routing, and fragment headers still leave L4 at the wrong offset (parked). Tagged IPv6 uses the same L3 offset as tagged IPv4 (byte 18); QinQ is parked.
+
+## 802.1Q IPv4 (`ns1_vlan100.pcap`)
+
+Local file, not in git. Synthetic VID 100 SYN is frame 6 of [ci_nic.log](ci_nic.log). Keep `make MAX_PACKETS=8` on untagged `traffic.pcap` (`hs=1 seq_ok=5`).
+
+Capture on the **parent** veth (`veth1`), not `veth1.100`. The VLAN subinterface usually strips `0x8100`, so the pcap looks untagged.
+
+```bash
+sudo modprobe 8021q
+
+sudo ip netns exec ns1 ip link add link veth1 name veth1.100 type vlan id 100
+sudo ip netns exec ns1 ip addr add 192.168.100.1/24 dev veth1.100
+sudo ip netns exec ns1 ip link set veth1.100 up
+
+sudo ip netns exec ns2 ip link add link veth2 name veth2.100 type vlan id 100
+sudo ip netns exec ns2 ip addr add 192.168.100.2/24 dev veth2.100
+sudo ip netns exec ns2 ip link set veth2.100 up
+```
+
+Do not put `192.168.100.x` on untagged `veth1` / `veth2`.
+
+```bash
+sudo ip netns exec ns1 tcpdump -i veth1 ether proto 0x8100 -c 1000 -w ns1_vlan100.pcap
+
+sudo ip netns exec ns2 iperf3 -s -B 192.168.100.2 -p 5201
+sudo ip netns exec ns1 iperf3 -c 192.168.100.2 -B 192.168.100.1 -p 5201 -t 8
+```
+
+Wireshark: EtherType `0x8100`, VLAN ID 100, inner `0x0800`. Replay:
+
+```bash
+make NIC=1 PCAP=ns1_vlan100.pcap MAX_PACKETS=20
+make wave
+```
+
+Expect `[HDR] ... etype=0x8100  VLAN vid=100  IPv4 ...`, `[CSUM] ffff OK` on TCP, `vlan=` equal to tagged frames, `CSUM mis=0` `RSS mis=0`. GTKWave: `u_snoop` / `u_parser` → `is_vlan`, `vlan_id`.
+
+IPv6 on the same VID (parser walks L3 at 18; not the CI focus):
+
+```bash
+sudo ip netns exec ns1 ip -6 addr add fd00:100::1/64 dev veth1.100
+sudo ip netns exec ns2 ip -6 addr add fd00:100::2/64 dev veth2.100
+sudo ip netns exec ns2 iperf3 -s -6 -B fd00:100::2 -p 5201
+sudo ip netns exec ns1 iperf3 -c fd00:100::2 -B fd00:100::1 -6 -p 5201 -t 8
+sudo ip netns exec ns1 tcpdump -i veth1 ether proto 0x8100 -c 1000 -w ns1_vlan100_ip6.pcap
+```
 
 ## Bring your own NIC
 
@@ -183,8 +231,9 @@ make AXIS_W=64 PCAP=soft_roce.pcap MAX_PACKETS=8
 python3 scripts/gen_pcap.py ci.pcap
 make NIC=1 PCAP=ci.pcap MAX_PACKETS=8 BP=2
 make NIC=1 PCAP=ns1_iperf6.pcap MAX_PACKETS=20
+make NIC=1 PCAP=ns1_vlan100.pcap MAX_PACKETS=20
 make wave
 make clean
 ```
 
-Architecture and plusargs: [docs/architecture.html](../docs/architecture.html), [docs/index.html](../docs/index.html). Parked HDL: VLAN, IPv6 extension headers ([CONTRIBUTING.md](../CONTRIBUTING.md)).
+Architecture and plusargs: [docs/architecture.html](../docs/architecture.html), [docs/index.html](../docs/index.html). Parked HDL: QinQ, IPv6 extension headers ([CONTRIBUTING.md](../CONTRIBUTING.md)).

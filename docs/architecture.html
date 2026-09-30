@@ -281,7 +281,7 @@
           </thead>
           <tbody>
             <tr><td>pkt_size_filter</td><td>tkeep popcount</td><td>pkt_done, pkt_bytes, runt / standard / jumbo</td></tr>
-            <tr><td>pkt_header_parser</td><td>byte index through Ethernet / IP / L4 / BTH</td><td>hdr_valid and header fields</td></tr>
+            <tr><td>pkt_header_parser</td><td>byte index through Ethernet / 802.1Q / IP / L4 / BTH</td><td>hdr_valid and header fields</td></tr>
             <tr><td>pkt_ip_csum</td><td>own IHL walk</td><td>csum_valid, csum, ok / err / skip vs C</td></tr>
             <tr><td>pkt_roce_icrc</td><td>same beats + is_roce, ip_tot_len</td><td>icrc_valid, ICRC ok / err / skip</td></tr>
           </tbody>
@@ -428,7 +428,7 @@
             <tr><td>hdl/tb_pcap_dpi.sv</td><td>DPI imports, AXIS master, plusargs, logs</td></tr>
             <tr><td>hdl/pkt_snoop.sv</td><td>Observer hierarchy under <code>u_snoop</code></td></tr>
             <tr><td>hdl/pkt_size_filter.sv</td><td>Runt / standard / jumbo from tkeep popcount</td></tr>
-            <tr><td>hdl/pkt_header_parser.sv</td><td>Streaming L2–L4, ARP, VXLAN, Soft-RoCEv2 BTH</td></tr>
+            <tr><td>hdl/pkt_header_parser.sv</td><td>Streaming L2–L4, 802.1Q, IPv6 base, ARP, VXLAN, Soft-RoCEv2 BTH</td></tr>
             <tr><td>hdl/pkt_tcp_tracker.sv</td><td>Handshake and next-seq CAM</td></tr>
             <tr><td>hdl/pkt_roce_tracker.sv</td><td>PSN / message / reverse ACK</td></tr>
             <tr><td>hdl/pkt_roce_icrc.sv</td><td>Masked CRC32 vs last 4 bytes</td></tr>

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a tiny Ethernet pcap for parser/CI gates (ARP, IPv4 TCP, VXLAN, runt, IPv6 TCP).
+"""Build a tiny Ethernet pcap for parser/CI gates (ARP, IPv4 TCP, VXLAN, runt, IPv6 TCP, 802.1Q IPv4).
 
 Uses the Python stdlib only so CI does not need Scapy. Output is local
 (gitignored *.pcap). Example:
@@ -35,6 +35,11 @@ def rec(raw: bytes, ts: int = 0) -> bytes:
 
 def eth(dst: bytes, src: bytes, etype: int, payload: bytes) -> bytes:
     return dst + src + struct.pack("!H", etype) + payload
+
+
+def eth_vlan(dst: bytes, src: bytes, vid: int, etype: int, payload: bytes) -> bytes:
+    tci = vid & 0x0FFF
+    return dst + src + struct.pack("!HHH", 0x8100, tci, etype) + payload
 
 
 def ipv4(src: bytes, dst: bytes, proto: int, payload: bytes) -> bytes:
@@ -104,6 +109,19 @@ def ipv6(src: bytes, dst: bytes, nxt: int, payload: bytes) -> bytes:
     return bytes([0x60, 0, 0, 0]) + struct.pack("!HBB", plen, nxt, 64) + src + dst + payload
 
 
+def tcp_syn_vlan_frame(vid: int = 100) -> bytes:
+    src_m = bytes.fromhex("020000000001")
+    dst_m = bytes.fromhex("020000000002")
+    payload = tcp_syn(34612, 5201)
+    return eth_vlan(
+        dst_m,
+        src_m,
+        vid,
+        0x0800,
+        ipv4(bytes.fromhex("c0a80101"), bytes.fromhex("c0a80102"), 6, payload),
+    )
+
+
 def tcp_syn_v6_frame() -> bytes:
     src_m = bytes.fromhex("020000000001")
     dst_m = bytes.fromhex("020000000002")
@@ -120,7 +138,7 @@ def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("out", nargs="?", default="ci.pcap")
     args = p.parse_args()
-    frames = [arp_request(), tcp_syn_frame(), vxlan_frame(), runt(), tcp_syn_v6_frame()]
+    frames = [arp_request(), tcp_syn_frame(), vxlan_frame(), runt(), tcp_syn_v6_frame(), tcp_syn_vlan_frame()]
     blob = pcap_hdr() + b"".join(rec(f, i) for i, f in enumerate(frames))
     with open(args.out, "wb") as f:
         f.write(blob)

@@ -146,7 +146,7 @@
         </thead>
         <tbody>
           <tr><td>pkt_size_filter</td><td>Runt (&lt;64) / standard / jumbo (&gt;1500) from <code>tkeep</code> popcount</td></tr>
-          <tr><td>pkt_header_parser</td><td>MAC, EtherType, IPv4 TTL/iplen, L4 ports, TCP flags/seq, RoCE BTH, ARP, VXLAN VNI</td></tr>
+          <tr><td>pkt_header_parser</td><td>MAC, EtherType, 802.1Q VID, IPv4 TTL/iplen, IPv6 base, L4 ports, TCP flags/seq, RoCE BTH, ARP, VXLAN VNI</td></tr>
           <tr><td>pkt_tcp_tracker</td><td>4-tuple CAM: SYN / SYN-ACK / HS_DONE / next-seq (<code>plen</code>) / FIN / RST</td></tr>
           <tr><td>pkt_roce_tracker</td><td>PSN per {src,dst,qp}, MSG_DONE, reverse ACK_OK, next-message PSN_GAP</td></tr>
           <tr><td>pkt_roce_icrc</td><td>Seed 0xdebb20e3, masked CRC32 vs last 4 bytes; truncated frames skipped</td></tr>
@@ -200,7 +200,7 @@
           <tr><td>make FILTER='udp'</td><td>streamed 0, skipped=1000 on a TCP-only capture</td></tr>
           <tr><td>make PCAP=soft_roce.pcap MAX_PACKETS=8</td><td>roce=8 msg=1 ack=1 icrc ok=8</td></tr>
           <tr><td>make PCAP=soft_roce.pcap MAX_PACKETS=16</td><td>msg=3 ack=3, next Send continues PSN</td></tr>
-          <tr><td>python3 scripts/gen_pcap.py ci.pcap && make PCAP=ci.pcap BP=2</td><td>arp=1 vxlan=1 CSUM mis=0, streamed 4</td></tr>
+          <tr><td>python3 scripts/gen_pcap.py ci.pcap && make PCAP=ci.pcap BP=2</td><td>arp=1 vxlan=1 ipv6=1 vlan=1 CSUM mis=0, streamed 6</td></tr>
         </tbody>
       </table>
     </div>
@@ -243,7 +243,7 @@ make AXIS_W=64 PCAP=soft_roce.pcap</pre>
           <h3>Parked (good first PRs)</h3>
           <ul class="list">
             <li>IPv6 extension headers (base 0x86dd is in); keep IPv4/RoCE gates green</li>
-            <li>802.1Q VLAN: EtherType 0x8100, then inner type; untagged captures must not break</li>
+            <li>QinQ / stacked tags (single 802.1Q is in); untagged captures must not break</li>
             <li>More example logs (failed handshake, malformed frames); do not commit <code>.pcap</code> files</li>
           </ul>
         </article>

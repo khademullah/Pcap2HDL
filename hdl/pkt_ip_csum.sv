@@ -1,6 +1,7 @@
 // IPv4 header checksum (RFC 1071). Same fold as dpi/pcap_reader.c.
 // Ones-complement sum of the IHL words, including the checksum field,
-// must fold to 16'hffff. Non-IPv4 and truncated headers are skipped.
+// must fold to 16'hffff. Skips a single 802.1Q tag before the IPv4 header.
+// Non-IPv4 and truncated headers are skipped.
 
 `timescale 1ns/1ps
 
@@ -25,27 +26,33 @@ module pkt_ip_csum #(
 
     localparam int KEEP_W = DATA_W / 8;
     localparam logic [15:0] ETYPE_IPV4 = 16'h0800;
+    localparam logic [15:0] ETYPE_VLAN = 16'h8100;
 
     logic [15:0] idx;
     logic [15:0] etype;
+    logic [15:0] inner;
     logic [3:0]  ihl;
     logic [31:0] acc;
     logic [7:0]  hold;
     logic        have_hold;
     logic        saw_ip;
+    logic        saw_vlan;
     logic        done;
 
     logic [15:0] idx_w;
     logic [15:0] etype_w;
+    logic [15:0] inner_w;
     logic [3:0]  ihl_w;
     logic [31:0] acc_w;
     logic [7:0]  hold_w;
     logic        have_hold_w;
     logic        saw_ip_w;
+    logic        saw_vlan_w;
     logic        done_w;
     logic [7:0]  b_w;
     logic        more_keep;
     logic        last_b;
+    logic [15:0] l3_w;
     logic [15:0] ip_last;
     logic [31:0] f;
     logic [15:0] folded;
@@ -54,11 +61,13 @@ module pkt_ip_csum #(
         if (!rst_n) begin
             idx       <= 16'd0;
             etype     <= 16'd0;
+            inner     <= 16'd0;
             ihl       <= 4'd5;
             acc       <= 32'd0;
             hold      <= 8'd0;
             have_hold <= 1'b0;
             saw_ip    <= 1'b0;
+            saw_vlan  <= 1'b0;
             done      <= 1'b0;
             csum_valid <= 1'b0;
             csum_ok    <= 1'b0;
@@ -75,20 +84,24 @@ module pkt_ip_csum #(
                 if (tstart) begin
                     idx_w       = 16'd0;
                     etype_w     = 16'd0;
+                    inner_w     = 16'd0;
                     ihl_w       = 4'd5;
                     acc_w       = 32'd0;
                     hold_w      = 8'd0;
                     have_hold_w = 1'b0;
                     saw_ip_w    = 1'b0;
+                    saw_vlan_w  = 1'b0;
                     done_w      = 1'b0;
                 end else begin
                     idx_w       = idx;
                     etype_w     = etype;
+                    inner_w     = inner;
                     ihl_w       = ihl;
                     acc_w       = acc;
                     hold_w      = hold;
                     have_hold_w = have_hold;
                     saw_ip_w    = saw_ip;
+                    saw_vlan_w  = saw_vlan;
                     done_w      = done;
                 end
 
@@ -106,11 +119,25 @@ module pkt_ip_csum #(
                         else if (idx_w == 16'd13)
                             etype_w[7:0] = b_w;
 
-                        if (idx_w == 16'd13)
-                            saw_ip_w = (etype_w == ETYPE_IPV4);
+                        if (idx_w == 16'd13) begin
+                            saw_vlan_w = (etype_w == ETYPE_VLAN);
+                            if (!saw_vlan_w)
+                                saw_ip_w = (etype_w == ETYPE_IPV4);
+                        end
 
-                        if (saw_ip_w && idx_w >= 16'd14) begin
-                            if (idx_w == 16'd14)
+                        if (saw_vlan_w) begin
+                            if (idx_w == 16'd16)
+                                inner_w[15:8] = b_w;
+                            else if (idx_w == 16'd17) begin
+                                inner_w[7:0] = b_w;
+                                saw_ip_w = (inner_w == ETYPE_IPV4);
+                            end
+                        end
+
+                        l3_w = saw_vlan_w ? 16'd18 : 16'd14;
+
+                        if (saw_ip_w && idx_w >= l3_w) begin
+                            if (idx_w == l3_w)
                                 ihl_w = (b_w[3:0] < 4'd5) ? 4'd5 : b_w[3:0];
                             if (!have_hold_w) begin
                                 hold_w      = b_w;
@@ -119,7 +146,7 @@ module pkt_ip_csum #(
                                 acc_w       = acc_w + {16'd0, hold_w, b_w};
                                 have_hold_w = 1'b0;
                             end
-                            ip_last = 16'd14 + {10'd0, ihl_w, 2'b00} - 16'd1;
+                            ip_last = l3_w + {10'd0, ihl_w, 2'b00} - 16'd1;
                             if (idx_w == ip_last) begin
                                 f = acc_w;
                                 f = (f & 32'hffff) + (f >> 16);
@@ -133,8 +160,8 @@ module pkt_ip_csum #(
                             end
                         end
 
-                        if (!done_w && last_b && (!saw_ip_w || idx_w < 16'd14 ||
-                            idx_w < (16'd14 + {10'd0, ihl_w, 2'b00} - 16'd1))) begin
+                        if (!done_w && last_b && (!saw_ip_w || idx_w < l3_w ||
+                            idx_w < (l3_w + {10'd0, ihl_w, 2'b00} - 16'd1))) begin
                             csum_valid <= 1'b1;
                             csum_skip  <= 1'b1;
                             done_w     = 1'b1;
@@ -146,11 +173,13 @@ module pkt_ip_csum #(
 
                 idx       <= idx_w;
                 etype     <= etype_w;
+                inner     <= inner_w;
                 ihl       <= ihl_w;
                 acc       <= acc_w;
                 hold      <= hold_w;
                 have_hold <= have_hold_w;
                 saw_ip    <= saw_ip_w;
+                saw_vlan  <= saw_vlan_w;
                 done      <= done_w;
             end
         end

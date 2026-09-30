@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-Nothing parked here yet. Next work is IPv6 / VLAN (see 0.4.0 “Not in this release”).
+IPv6 base header (EtherType 0x86dd, no extension headers): classify TCP/UDP, RSS Toeplitz 4-tuple, TCP tracker on 128-bit addresses. IPv6 has no IPv4 header checksum (`CSUM skip`). VLAN still parked.
 
 ## 0.4.0
 

@@ -49,6 +49,7 @@ module tb_pcap_dpi #(
 
     wire        hdr_valid;
     wire        hdr_is_ipv4;
+    wire        hdr_is_ipv6;
     wire        hdr_is_non_ipv4;
     wire        hdr_is_truncated;
     wire        hdr_is_tcp;
@@ -62,6 +63,8 @@ module tb_pcap_dpi #(
     wire [15:0] ethertype;
     wire [31:0] src_ip;
     wire [31:0] dst_ip;
+    wire [127:0] src_ip6;
+    wire [127:0] dst_ip6;
     wire [7:0]  ip_ttl;
     wire [15:0] ip_tot_len;
     wire        is_len_mismatch;
@@ -131,7 +134,7 @@ module tb_pcap_dpi #(
     int packet_count;
     int max_packets;
     int n_runt, n_standard, n_jumbo;
-    int n_ipv4, n_non_ipv4, n_truncated;
+    int n_ipv4, n_ipv6, n_non_ipv4, n_truncated;
     int n_tcp, n_udp, n_roce;
     int n_msg, n_ack, n_psn_err, n_op_err;
     int n_hs, n_tcp_seq_ok, n_tcp_seq_err, n_tcp_op_err;
@@ -215,6 +218,7 @@ module tb_pcap_dpi #(
         .is_jumbo(is_jumbo),
         .hdr_valid(hdr_valid),
         .hdr_is_ipv4(hdr_is_ipv4),
+        .hdr_is_ipv6(hdr_is_ipv6),
         .hdr_is_non_ipv4(hdr_is_non_ipv4),
         .hdr_is_truncated(hdr_is_truncated),
         .hdr_is_tcp(hdr_is_tcp),
@@ -228,6 +232,8 @@ module tb_pcap_dpi #(
         .ethertype(ethertype),
         .src_ip(src_ip),
         .dst_ip(dst_ip),
+        .src_ip6(src_ip6),
+        .dst_ip6(dst_ip6),
         .ip_ttl(ip_ttl),
         .ip_tot_len(ip_tot_len),
         .is_len_mismatch(is_len_mismatch),
@@ -424,6 +430,8 @@ module tb_pcap_dpi #(
                 ;
             else if (hdr_is_ipv4)
                 n_ipv4 = n_ipv4 + 1;
+            else if (hdr_is_ipv6)
+                n_ipv6 = n_ipv6 + 1;
             else
                 n_non_ipv4 = n_non_ipv4 + 1;
             if (hdr_is_tcp)  n_tcp  = n_tcp + 1;
@@ -466,7 +474,14 @@ module tb_pcap_dpi #(
                              src_ip[31:24], src_ip[23:16], src_ip[15:8], src_ip[7:0], src_port,
                              dst_ip[31:24], dst_ip[23:16], dst_ip[15:8], dst_ip[7:0], dst_port,
                              bth_opname(bth_opcode), dest_qp, bth_psn, bth_pkey);
-            end else
+            end else if (hdr_is_ipv6)
+                $display("[HDR] dst=%012h  src=%012h  etype=0x%04h      IPv6 hop=%0d iplen=%0d  %032h:%0d -> %032h:%0d  %s",
+                         dst_mac, src_mac, ethertype, ip_ttl, ip_tot_len,
+                         src_ip6, src_port, dst_ip6, dst_port,
+                         hdr_is_tcp ? $sformatf("TCP %s seq=0x%08h ack=0x%08h plen=%0d",
+                                                tcp_flagstr(tcp_flags), tcp_seq, tcp_ackn, tcp_plen) :
+                         hdr_is_udp ? "UDP" : "");
+            else
                 $display("[HDR] dst=%012h  src=%012h  etype=0x%04h  %s ttl=%0d iplen=%0d  %0d.%0d.%0d.%0d:%0d -> %0d.%0d.%0d.%0d:%0d  %s",
                          dst_mac, src_mac, ethertype,
                          hdr_is_truncated ? "TRUNC" : hdr_is_ipv4 ? "IPv4" : "NON-IPv4",
@@ -554,6 +569,7 @@ module tb_pcap_dpi #(
         n_standard = 0;
         n_jumbo = 0;
         n_ipv4 = 0;
+        n_ipv6 = 0;
         n_non_ipv4 = 0;
         n_truncated = 0;
         n_tcp = 0;
@@ -755,8 +771,8 @@ module tb_pcap_dpi #(
         $display("\n[SV] Simulation finished. File=%s  Streamed %0d packets.", pcap_name, packet_count);
         $display("[DUT] Size    runt=%0d  standard=%0d  jumbo=%0d",
                  n_runt, n_standard, n_jumbo);
-        $display("[DUT] Header  ipv4=%0d  tcp=%0d  udp=%0d  roce=%0d  arp=%0d  vxlan=%0d  other=%0d  trunc=%0d",
-                 n_ipv4, n_tcp, n_udp, n_roce, n_arp, n_vxlan, n_non_ipv4, n_truncated);
+        $display("[DUT] Header  ipv4=%0d  ipv6=%0d  tcp=%0d  udp=%0d  roce=%0d  arp=%0d  vxlan=%0d  other=%0d  trunc=%0d",
+                 n_ipv4, n_ipv6, n_tcp, n_udp, n_roce, n_arp, n_vxlan, n_non_ipv4, n_truncated);
         $display("[DUT] Tracker msg=%0d  ack=%0d  psn_err=%0d  op_err=%0d  psn_gap=%0d",
                  n_msg, n_ack, n_psn_err, n_op_err, n_psn_gap);
         $display("[DUT] TCP     hs=%0d  fin=%0d  rst=%0d  seq_ok=%0d  seq_err=%0d  op_err=%0d",

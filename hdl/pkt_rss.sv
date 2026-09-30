@@ -1,5 +1,5 @@
-// NIC RSS: Microsoft Toeplitz hash of IPv4 4-tuple (TCP/UDP) or 2-tuple (other).
-// Same 40-byte key and bit order as dpi/pcap_reader.c. Queue = hash % NUM_Q.
+// NIC RSS: Microsoft Toeplitz. IPv4 4-tuple (12 B) or 2-tuple (8 B);
+// IPv6 4-tuple (36 B) or 2-tuple (32 B). Same 40-byte key as dpi/pcap_reader.c.
 
 `timescale 1ns/1ps
 
@@ -10,10 +10,13 @@ module pkt_rss #(
     input  logic        rst_n,
     input  logic        hdr_valid,
     input  logic        is_ipv4,
+    input  logic        is_ipv6,
     input  logic        is_truncated,
     input  logic [7:0]  ip_proto,
     input  logic [31:0] src_ip,
     input  logic [31:0] dst_ip,
+    input  logic [127:0] src_ip6,
+    input  logic [127:0] dst_ip6,
     input  logic [15:0] src_port,
     input  logic [15:0] dst_port,
 
@@ -44,7 +47,7 @@ module pkt_rss #(
         return v;
     endfunction
 
-    function automatic logic [31:0] toeplitz(input logic [7:0] in [0:11], input int nbytes);
+    function automatic logic [31:0] toeplitz(input logic [7:0] in [0:35], input int nbytes);
         logic [31:0] hash;
         int off;
         hash = 32'd0;
@@ -59,7 +62,7 @@ module pkt_rss #(
         return hash;
     endfunction
 
-    logic [7:0]  inb [0:11];
+    logic [7:0]  inb [0:35];
     logic [31:0] h;
     int          n;
 
@@ -73,8 +76,22 @@ module pkt_rss #(
             rss_valid <= 1'b0;
             rss_skip  <= 1'b0;
             if (hdr_valid) begin
-                if (!is_ipv4 || is_truncated) begin
+                if (is_truncated || !(is_ipv4 || is_ipv6)) begin
                     rss_skip <= 1'b1;
+                end else if (is_ipv6) begin
+                    for (int k = 0; k < 16; k++) begin
+                        inb[k]      = src_ip6[8*(15-k) +: 8];
+                        inb[16 + k] = dst_ip6[8*(15-k) +: 8];
+                    end
+                    inb[32] = src_port[15:8];
+                    inb[33] = src_port[7:0];
+                    inb[34] = dst_port[15:8];
+                    inb[35] = dst_port[7:0];
+                    n = ((ip_proto == 8'd6) || (ip_proto == 8'd17)) ? 36 : 32;
+                    h = toeplitz(inb, n);
+                    rss_hash  <= h;
+                    rss_qid   <= 2'(h % NUM_Q);
+                    rss_valid <= 1'b1;
                 end else begin
                     inb[0]  = src_ip[31:24];
                     inb[1]  = src_ip[23:16];

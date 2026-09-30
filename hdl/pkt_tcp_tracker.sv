@@ -12,8 +12,8 @@ module pkt_tcp_tracker #(
     input  logic        rst_n,
     input  logic        hdr_valid,
     input  logic        is_tcp,
-    input  logic [31:0] src_ip,
-    input  logic [31:0] dst_ip,
+    input  logic [127:0] src_ip,
+    input  logic [127:0] dst_ip,
     input  logic [15:0] src_port,
     input  logic [15:0] dst_port,
     input  logic [31:0] seq,
@@ -38,8 +38,8 @@ module pkt_tcp_tracker #(
         logic        syn_seen;
         logic        synack_seen;
         logic        established;
-        logic [31:0] src_ip;
-        logic [31:0] dst_ip;
+        logic [127:0] src_ip;
+        logic [127:0] dst_ip;
         logic [15:0] src_port;
         logic [15:0] dst_port;
         logic [31:0] client_iss;

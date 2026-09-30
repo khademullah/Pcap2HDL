@@ -150,9 +150,9 @@ static unsigned int rss_toeplitz(const unsigned char *in, int nbytes)
 
 static void compute_rss(void)
 {
-    unsigned char in[12];
-    int ihl, l4, cap;
-    unsigned et;
+    unsigned char in[36];
+    int ihl, l4, cap, i;
+    unsigned et, nh;
 
     rss_valid = 0;
     rss_hash_val = 0;
@@ -162,6 +162,27 @@ static void compute_rss(void)
     if (cap < 34)
         return;
     et = ((unsigned)packet_data[12] << 8) | packet_data[13];
+    if (et == 0x86ddu) {
+        if (cap < 54)
+            return;
+        nh = packet_data[20];
+        for (i = 0; i < 16; i++) {
+            in[i]      = packet_data[22 + i];
+            in[16 + i] = packet_data[38 + i];
+        }
+        l4 = 54;
+        if ((nh == 6 || nh == 17) && cap >= l4 + 4) {
+            in[32] = packet_data[l4];
+            in[33] = packet_data[l4 + 1];
+            in[34] = packet_data[l4 + 2];
+            in[35] = packet_data[l4 + 3];
+            rss_hash_val = rss_toeplitz(in, 36);
+        } else {
+            rss_hash_val = rss_toeplitz(in, 32);
+        }
+        rss_valid = 1;
+        return;
+    }
     if (et != 0x0800)
         return;
     ihl = packet_data[14] & 0x0f;

@@ -238,19 +238,19 @@ Capture a new file with `sudo ./scripts/soft_roce_veth.sh setup` then `demo` (`d
 - Environment: DPI-C pcap stream into Verilator (bytes, wire length, timestamp, DLT)
 - Control: packet cap and clean exit
 - Size filter: runt / standard / jumbo (`tkeep` popcount)
-- L2/L3: MAC, EtherType, IPv4 TTL and total length (LEN_MISMATCH vs captured)
+- L2/L3: MAC, EtherType, IPv4 TTL and total length (LEN_MISMATCH vs captured); IPv6 base header (hop limit, payload+40 as iplen; no extension headers)
+- IPv4 checksum: RFC 1071 in C and HDL (`CSUM mis=0`); `tuser_err` is fail sideband. IPv6 has no header checksum (`skip`).
 - L4: TCP/UDP ports; TCP flags, seq, ack
 - RoCEv2 BTH: opcode, dest QP, PSN, P_Key, AckReq
 - RoCEv2 ICRC: last 4 bytes checked; truncated captures skipped
 - Tracker: RoCE PSN/ACK and next-message PSN_GAP; TCP SYN / SYN-ACK / HS_DONE / next-seq (`plen`) / FIN / RST
-- RSS: Toeplitz 4-tuple in C and HDL (`tuser`); four queues, `mis=0`
-- IPv4 checksum: RFC 1071 in C and HDL (`CSUM mis=0`); `tuser_err` is fail sideband
+- RSS: Toeplitz 4-tuple in C and HDL (`tuser`); four queues, `mis=0` (IPv6 32/36-byte key input)
 - ARP (`0x0806`) and VXLAN (UDP/4789, VNI, inner Ethernet)
 - Replay: optional `+PACE=1` IFG from pcap timestamps (capped); `AXIS_W=64` eight-byte beats; slave `tready` from `nic_rx` AND `+BP=1`/`+BP=2`; `+NIC_PAUSE=1` stalls inside the slave; `DUMP=` writes the bus back to a pcap; `FILTER=` is libpcap BPF (`pcap_offline_filter`) with `matched` / `skipped` counts
 - Bring your own NIC: optional `nic_rx` AXIS slave (`make NIC=1`); observers under `u_snoop`
 - Coverage print `[COV]` size / TCP flags / RoCE opcodes. CI: `.github/workflows/ci.yml` + `scripts/gen_pcap.py`
 
-Still parked: IPv6, VLAN. See [CHANGELOG.md](CHANGELOG.md) (0.4.0 “Not in this release”). How to contribute: [CONTRIBUTING.md](CONTRIBUTING.md).
+Still parked: VLAN, IPv6 extension headers. See [CHANGELOG.md](CHANGELOG.md). How to contribute: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

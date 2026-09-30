@@ -242,7 +242,7 @@ make AXIS_W=64 PCAP=soft_roce.pcap</pre>
         <article class="card">
           <h3>Parked (good first PRs)</h3>
           <ul class="list">
-            <li>IPv6 in <code>pkt_header_parser.sv</code>, keep IPv4/RoCE gates green</li>
+            <li>IPv6 extension headers (base 0x86dd is in); keep IPv4/RoCE gates green</li>
             <li>802.1Q VLAN: EtherType 0x8100, then inner type; untagged captures must not break</li>
             <li>More example logs (failed handshake, malformed frames); do not commit <code>.pcap</code> files</li>
           </ul>

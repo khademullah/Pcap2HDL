@@ -11,7 +11,7 @@ Reference logs after M1–M4 (`ttl` / `iplen`, TCP handshake, RoCE PSN + AckReq)
 | [soft_roce_gtkwave.jpg](soft_roce_gtkwave.jpg) | `make wave` | `hdr_is_roce`, `dst_port=0x12b7` |
 | (same gates) | `make BP=1` | `tready` 50%; counts unchanged |
 | (same gates) | `make BP=2` | random `tready`; counts unchanged |
-| (synthetic) | `python3 scripts/gen_pcap.py ci.pcap && make NIC=1 PCAP=ci.pcap MAX_PACKETS=8 BP=2` | `arp=1 vxlan=1 CSUM mis=0` streamed 4; `[NIC] rx=4 mis=0` |
+| (synthetic) | `python3 scripts/gen_pcap.py ci.pcap && make NIC=1 PCAP=ci.pcap MAX_PACKETS=8 BP=2` | `arp=1 vxlan=1 ipv6=1 CSUM mis=0` streamed 5; `[NIC] rx=5 mis=0` |
 | (same gates) | `make FILTER='tcp port 5201'` | BPF `matched=100 skipped=0` |
 | (0 packets) | `make FILTER='udp'` | `matched=0 skipped=1000`; TCP capture |
 

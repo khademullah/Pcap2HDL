@@ -1,4 +1,5 @@
-// Streaming Ethernet / IPv4 / L4 parser.
+// Streaming Ethernet / IPv4 / IPv6 / L4 parser.
+// IPv6 is the 40-byte base header only (no hop-by-hop / routing / fragment).
 // Soft-RoCEv2 = IPv4 + UDP port 4791. Soft-RoCEv1 = EtherType 0x8915.
 // ARP = 0x0806. VXLAN = UDP dest 4789 (inner Ethernet + VNI).
 // DATA_W=8 is one byte per cycle; DATA_W=64 walks tkeep lanes in one beat.
@@ -20,6 +21,7 @@ module pkt_header_parser #(
 
     output logic        hdr_valid,
     output logic        is_ipv4,
+    output logic        is_ipv6,
     output logic        is_non_ipv4,
     output logic        is_truncated,
     output logic        is_tcp,
@@ -33,6 +35,8 @@ module pkt_header_parser #(
     output logic [15:0] ethertype,
     output logic [31:0] src_ip,
     output logic [31:0] dst_ip,
+    output logic [127:0] src_ip6,
+    output logic [127:0] dst_ip6,
     output logic [7:0]  ip_ttl,
     output logic [15:0] ip_tot_len,
     output logic        is_len_mismatch,
@@ -52,6 +56,7 @@ module pkt_header_parser #(
 
     localparam int KEEP_W = DATA_W / 8;
     localparam logic [15:0] ETYPE_IPV4   = 16'h0800;
+    localparam logic [15:0] ETYPE_IPV6   = 16'h86DD;
     localparam logic [15:0] ETYPE_ARP    = 16'h0806;
     localparam logic [15:0] ETYPE_ROCEV1 = 16'h8915;
     localparam logic [7:0]  PROTO_TCP    = 8'd6;
@@ -62,6 +67,7 @@ module pkt_header_parser #(
     logic [15:0] byte_idx;
     logic        hdr_issued;
     logic        saw_ipv4;
+    logic        saw_ipv6;
     logic [3:0]  ip_ihl;
     logic [3:0]  tcp_doff;
 
@@ -71,6 +77,11 @@ module pkt_header_parser #(
     logic        more_keep;
     logic        hdr_issued_w;
     logic        saw_ipv4_w;
+    logic        saw_ipv6_w;
+    logic [127:0] src_ip6_w;
+    logic [127:0] dst_ip6_w;
+    logic        is_ipv6_w;
+    logic        saw_l3_w;
     logic [3:0]  ip_ihl_w;
     logic [47:0] dst_mac_w;
     logic [47:0] src_mac_w;
@@ -122,10 +133,12 @@ module pkt_header_parser #(
             byte_idx     <= 16'd0;
             hdr_issued   <= 1'b0;
             saw_ipv4     <= 1'b0;
+            saw_ipv6     <= 1'b0;
             ip_ihl       <= 4'd5;
             tcp_doff     <= 4'd5;
             hdr_valid    <= 1'b0;
             is_ipv4      <= 1'b0;
+            is_ipv6      <= 1'b0;
             is_non_ipv4  <= 1'b0;
             is_truncated <= 1'b0;
             is_tcp       <= 1'b0;
@@ -139,6 +152,8 @@ module pkt_header_parser #(
             ethertype    <= 16'd0;
             src_ip       <= 32'd0;
             dst_ip       <= 32'd0;
+            src_ip6      <= 128'd0;
+            dst_ip6      <= 128'd0;
             ip_ttl       <= 8'd0;
             ip_tot_len   <= 16'd0;
             is_len_mismatch <= 1'b0;
@@ -163,6 +178,9 @@ module pkt_header_parser #(
                     idx_w         = 16'd0;
                     hdr_issued_w  = 1'b0;
                     saw_ipv4_w    = 1'b0;
+                    saw_ipv6_w    = 1'b0;
+                    src_ip6_w     = 128'd0;
+                    dst_ip6_w     = 128'd0;
                     ip_ihl_w      = 4'd5;
                     dst_mac_w     = 48'd0;
                     src_mac_w     = 48'd0;
@@ -184,6 +202,7 @@ module pkt_header_parser #(
                     dest_qp_w     = 24'd0;
                     bth_psn_w     = 24'd0;
                     is_ipv4_w     = 1'b0;
+                    is_ipv6_w     = 1'b0;
                     is_non_ipv4_w = 1'b0;
                     is_truncated_w= 1'b0;
                     is_tcp_w      = 1'b0;
@@ -197,6 +216,9 @@ module pkt_header_parser #(
                     idx_w         = byte_idx;
                     hdr_issued_w  = hdr_issued;
                     saw_ipv4_w    = saw_ipv4;
+                    saw_ipv6_w    = saw_ipv6;
+                    src_ip6_w     = src_ip6;
+                    dst_ip6_w     = dst_ip6;
                     ip_ihl_w      = ip_ihl;
                     dst_mac_w     = dst_mac;
                     src_mac_w     = src_mac;
@@ -218,6 +240,7 @@ module pkt_header_parser #(
                     dest_qp_w     = dest_qp;
                     bth_psn_w     = bth_psn;
                     is_ipv4_w     = is_ipv4;
+                    is_ipv6_w     = is_ipv6;
                     is_non_ipv4_w = is_non_ipv4;
                     is_truncated_w= is_truncated;
                     is_tcp_w      = is_tcp;
@@ -259,10 +282,16 @@ module pkt_header_parser #(
                             default: ;
                         endcase
 
-                        if (idx_w == 16'd13)
+                        if (idx_w == 16'd13) begin
                             saw_ipv4_w = (ethertype_w == ETYPE_IPV4);
+                            saw_ipv6_w = (ethertype_w == ETYPE_IPV6);
+                        end
 
-                        l4_off_w      = 16'd14 + {10'd0, ip_ihl_w, 2'b00};
+                        saw_l3_w = saw_ipv4_w || saw_ipv6_w;
+                        if (saw_ipv6_w)
+                            l4_off_w = 16'd54;
+                        else
+                            l4_off_w = 16'd14 + {10'd0, ip_ihl_w, 2'b00};
                         l4_last_w     = l4_off_w + 16'd3;
                         tcp_last_w    = l4_off_w + 16'd13;
                         bth_off_w     = l4_off_w + 16'd8;
@@ -287,15 +316,39 @@ module pkt_header_parser #(
                                 16'd33: dst_ip_w[7:0]      = b_w;
                                 default: ;
                             endcase
+                            src_ip6_w = {80'd0, 16'hffff, src_ip_w};
+                            dst_ip6_w = {80'd0, 16'hffff, dst_ip_w};
+                        end
 
-                            l4_off_w      = 16'd14 + {10'd0, ip_ihl_w, 2'b00};
-                            l4_last_w     = l4_off_w + 16'd3;
-                            tcp_last_w    = l4_off_w + 16'd13;
-                            bth_off_w     = l4_off_w + 16'd8;
-                            bth_last_w    = bth_off_w + 16'd11;
-                            needs_ports_w = (ip_proto_w == PROTO_TCP) || (ip_proto_w == PROTO_UDP);
-                            is_tcp_now_w  = (ip_proto_w == PROTO_TCP);
+                        if (saw_ipv6_w) begin
+                            unique case (idx_w)
+                                16'd18: ip_tot_len_w[15:8] = b_w;
+                                16'd19: begin
+                                    ip_tot_len_w[7:0] = b_w;
+                                    ip_tot_len_w = 16'd40 + ip_tot_len_w;
+                                end
+                                16'd20: ip_proto_w = b_w;
+                                16'd21: ip_ttl_w   = b_w;
+                                default: ;
+                            endcase
+                            if ((idx_w >= 16'd22) && (idx_w <= 16'd37))
+                                src_ip6_w[8*(16'd37 - idx_w) +: 8] = b_w;
+                            if ((idx_w >= 16'd38) && (idx_w <= 16'd53))
+                                dst_ip6_w[8*(16'd53 - idx_w) +: 8] = b_w;
+                            src_ip_w = src_ip6_w[31:0];
+                            dst_ip_w = dst_ip6_w[31:0];
+                        end
 
+                        l4_off_w      = saw_ipv6_w ? 16'd54 :
+                                        (16'd14 + {10'd0, ip_ihl_w, 2'b00});
+                        l4_last_w     = l4_off_w + 16'd3;
+                        tcp_last_w    = l4_off_w + 16'd13;
+                        bth_off_w     = l4_off_w + 16'd8;
+                        bth_last_w    = bth_off_w + 16'd11;
+                        needs_ports_w = (ip_proto_w == PROTO_TCP) || (ip_proto_w == PROTO_UDP);
+                        is_tcp_now_w  = (ip_proto_w == PROTO_TCP);
+
+                        if (saw_l3_w) begin
                             if (idx_w == l4_off_w)
                                 src_port_w[15:8] = b_w;
                             else if (idx_w == (l4_off_w + 16'd1))
@@ -327,14 +380,14 @@ module pkt_header_parser #(
                         end
 
                         roce_now_w = (ethertype_w == ETYPE_ROCEV1) ||
-                                     ((ip_proto_w == PROTO_UDP) &&
+                                     (saw_l3_w && (ip_proto_w == PROTO_UDP) &&
                                       ((src_port_w == PORT_ROCEV2) || (dst_port_w == PORT_ROCEV2)));
-                        vxlan_now_w = (ip_proto_w == PROTO_UDP) &&
+                        vxlan_now_w = saw_ipv4_w && (ip_proto_w == PROTO_UDP) &&
                                       (dst_port_w == PORT_VXLAN) && !roce_now_w;
                         vxlan_last_w = l4_off_w + 16'd15;
                         inner_et_w   = l4_off_w + 16'd29;
 
-                        if (saw_ipv4_w && roce_now_w) begin
+                        if (saw_l3_w && roce_now_w) begin
                             if (idx_w == bth_off_w)
                                 bth_opcode_w = b_w;
                             else if (idx_w == (bth_off_w + 16'd2))
@@ -368,44 +421,61 @@ module pkt_header_parser #(
 
                         if (!hdr_issued_w) begin
                             if (idx_w == 16'd13 && ethertype_w == ETYPE_ARP)
-                                emit_w(1'b0, 1'b0, 1'b0, 1'b1, 1'b0);
-                            else if (idx_w == 16'd13 && ethertype_w != ETYPE_IPV4)
-                                emit_w(1'b0, 1'b1, 1'b0, 1'b0, 1'b0);
+                                emit_w(1'b0, 1'b0, 1'b0, 1'b0, 1'b1, 1'b0);
+                            else if (idx_w == 16'd13 && ethertype_w != ETYPE_IPV4 &&
+                                     ethertype_w != ETYPE_IPV6)
+                                emit_w(1'b0, 1'b0, 1'b1, 1'b0, 1'b0, 1'b0);
                             else if (idx_w == 16'd13 && last_b)
-                                emit_w(1'b0, 1'b0, 1'b1, 1'b0, 1'b0);
+                                emit_w(1'b0, 1'b0, 1'b0, 1'b1, 1'b0, 1'b0);
                             else if (saw_ipv4_w && is_tcp_now_w && !roce_now_w && !vxlan_now_w && idx_w == tcp_last_w)
-                                emit_w(1'b1, 1'b0, 1'b0, 1'b0, 1'b0);
+                                emit_w(1'b1, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0);
+                            else if (saw_ipv6_w && is_tcp_now_w && !roce_now_w && idx_w == tcp_last_w)
+                                emit_w(1'b0, 1'b1, 1'b0, 1'b0, 1'b0, 1'b0);
                             else if (saw_ipv4_w && needs_ports_w && !is_tcp_now_w && !roce_now_w && !vxlan_now_w && idx_w == l4_last_w)
-                                emit_w(1'b1, 1'b0, 1'b0, 1'b0, 1'b0);
+                                emit_w(1'b1, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0);
+                            else if (saw_ipv6_w && needs_ports_w && !is_tcp_now_w && !roce_now_w && idx_w == l4_last_w)
+                                emit_w(1'b0, 1'b1, 1'b0, 1'b0, 1'b0, 1'b0);
                             else if (saw_ipv4_w && roce_now_w && idx_w == bth_last_w)
-                                emit_w(1'b1, 1'b0, 1'b0, 1'b0, 1'b0);
+                                emit_w(1'b1, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0);
+                            else if (saw_ipv6_w && roce_now_w && idx_w == bth_last_w)
+                                emit_w(1'b0, 1'b1, 1'b0, 1'b0, 1'b0, 1'b0);
                             else if (saw_ipv4_w && vxlan_now_w && idx_w == inner_et_w)
-                                emit_w(1'b1, 1'b0, 1'b0, 1'b0, 1'b1);
+                                emit_w(1'b1, 1'b0, 1'b0, 1'b0, 1'b0, 1'b1);
                             else if (saw_ipv4_w && !needs_ports_w && idx_w == 16'd33)
-                                emit_w(1'b1, 1'b0, 1'b0, 1'b0, 1'b0);
+                                emit_w(1'b1, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0);
+                            else if (saw_ipv6_w && !needs_ports_w && idx_w == 16'd53)
+                                emit_w(1'b0, 1'b1, 1'b0, 1'b0, 1'b0, 1'b0);
                             else if (last_b && idx_w < 16'd13)
-                                emit_w(1'b0, 1'b0, 1'b1, 1'b0, 1'b0);
+                                emit_w(1'b0, 1'b0, 1'b0, 1'b1, 1'b0, 1'b0);
                             else if (last_b && saw_ipv4_w && roce_now_w && idx_w < bth_last_w)
-                                emit_w(1'b0, 1'b0, 1'b1, 1'b0, 1'b0);
+                                emit_w(1'b0, 1'b0, 1'b0, 1'b1, 1'b0, 1'b0);
+                            else if (last_b && saw_ipv6_w && roce_now_w && idx_w < bth_last_w)
+                                emit_w(1'b0, 1'b0, 1'b0, 1'b1, 1'b0, 1'b0);
                             else if (last_b && saw_ipv4_w && vxlan_now_w && idx_w < inner_et_w)
-                                emit_w(1'b0, 1'b0, 1'b1, 1'b0, 1'b0);
+                                emit_w(1'b0, 1'b0, 1'b0, 1'b1, 1'b0, 1'b0);
                             else if (last_b && saw_ipv4_w && is_tcp_now_w && !roce_now_w && !vxlan_now_w && idx_w < tcp_last_w)
-                                emit_w(1'b0, 1'b0, 1'b1, 1'b0, 1'b0);
+                                emit_w(1'b0, 1'b0, 1'b0, 1'b1, 1'b0, 1'b0);
+                            else if (last_b && saw_ipv6_w && is_tcp_now_w && !roce_now_w && idx_w < tcp_last_w)
+                                emit_w(1'b0, 1'b0, 1'b0, 1'b1, 1'b0, 1'b0);
                             else if (last_b && saw_ipv4_w && needs_ports_w && !is_tcp_now_w && !roce_now_w && !vxlan_now_w && idx_w < l4_last_w)
-                                emit_w(1'b0, 1'b0, 1'b1, 1'b0, 1'b0);
+                                emit_w(1'b0, 1'b0, 1'b0, 1'b1, 1'b0, 1'b0);
+                            else if (last_b && saw_ipv6_w && needs_ports_w && !is_tcp_now_w && !roce_now_w && idx_w < l4_last_w)
+                                emit_w(1'b0, 1'b0, 1'b0, 1'b1, 1'b0, 1'b0);
                             else if (last_b && saw_ipv4_w && !needs_ports_w && idx_w < 16'd33)
-                                emit_w(1'b0, 1'b0, 1'b1, 1'b0, 1'b0);
+                                emit_w(1'b0, 1'b0, 1'b0, 1'b1, 1'b0, 1'b0);
+                            else if (last_b && saw_ipv6_w && !needs_ports_w && idx_w < 16'd53)
+                                emit_w(1'b0, 1'b0, 1'b0, 1'b1, 1'b0, 1'b0);
                         end
 
                         idx_w = idx_w + 16'd1;
                     end
                 end
 
-                if (tlast && saw_ipv4_w && (ip_tot_len_w != 16'd0) &&
+                if (tlast && (saw_ipv4_w || saw_ipv6_w) && (ip_tot_len_w != 16'd0) &&
                     (idx_w != (16'd14 + ip_tot_len_w)))
                     is_len_mis_w = 1'b1;
 
-                iph_w  = {10'd0, ip_ihl_w, 2'b00};
+                iph_w  = saw_ipv6_w ? 16'd40 : {10'd0, ip_ihl_w, 2'b00};
                 tcph_w = {10'd0, tcp_doff_w, 2'b00};
                 if (is_tcp_w && (ip_tot_len_w >= (iph_w + tcph_w)))
                     tcp_plen_w = ip_tot_len_w - iph_w - tcph_w;
@@ -415,6 +485,7 @@ module pkt_header_parser #(
                 byte_idx     <= idx_w;
                 hdr_issued   <= hdr_issued_w;
                 saw_ipv4     <= saw_ipv4_w;
+                saw_ipv6     <= saw_ipv6_w;
                 ip_ihl       <= ip_ihl_w;
                 tcp_doff     <= tcp_doff_w;
                 dst_mac      <= dst_mac_w;
@@ -422,6 +493,8 @@ module pkt_header_parser #(
                 ethertype    <= ethertype_w;
                 src_ip       <= src_ip_w;
                 dst_ip       <= dst_ip_w;
+                src_ip6      <= src_ip6_w;
+                dst_ip6      <= dst_ip6_w;
                 ip_ttl       <= ip_ttl_w;
                 ip_tot_len   <= ip_tot_len_w;
                 ip_proto     <= ip_proto_w;
@@ -438,6 +511,7 @@ module pkt_header_parser #(
                 bth_psn      <= bth_psn_w;
                 hdr_valid    <= hdr_valid_w;
                 is_ipv4      <= is_ipv4_w;
+                is_ipv6      <= is_ipv6_w;
                 is_non_ipv4  <= is_non_ipv4_w;
                 is_truncated <= is_truncated_w;
                 is_tcp       <= is_tcp_w;
@@ -453,6 +527,7 @@ module pkt_header_parser #(
 
     task automatic emit_w(
         input logic ipv4,
+        input logic ipv6,
         input logic non_ipv4,
         input logic trunc,
         input logic arp,
@@ -461,12 +536,13 @@ module pkt_header_parser #(
         hdr_valid_w    = 1'b1;
         hdr_issued_w   = 1'b1;
         is_ipv4_w      = ipv4 && !arp;
+        is_ipv6_w      = ipv6;
         is_non_ipv4_w  = non_ipv4;
         is_truncated_w = trunc;
         is_arp_w       = arp;
         is_vxlan_w     = vxlan;
-        is_tcp_w       = ipv4 && (ip_proto_w == PROTO_TCP) && !vxlan;
-        is_udp_w       = ipv4 && (ip_proto_w == PROTO_UDP) && !roce_now_w && !vxlan;
+        is_tcp_w       = (ipv4 || ipv6) && (ip_proto_w == PROTO_TCP) && !vxlan;
+        is_udp_w       = (ipv4 || ipv6) && (ip_proto_w == PROTO_UDP) && !roce_now_w && !vxlan;
         is_roce_w      = roce_now_w && !vxlan;
     endtask
 

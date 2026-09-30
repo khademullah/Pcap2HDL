@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a tiny Ethernet pcap for parser/CI gates (ARP, IPv4 TCP, VXLAN, runt).
+"""Build a tiny Ethernet pcap for parser/CI gates (ARP, IPv4 TCP, VXLAN, runt, IPv6 TCP).
 
 Uses the Python stdlib only so CI does not need Scapy. Output is local
 (gitignored *.pcap). Example:
@@ -99,6 +99,19 @@ def vxlan_frame() -> bytes:
     return eth(bytes.fromhex("020000000002"), bytes.fromhex("020000000001"), 0x0800, outer)
 
 
+def ipv6(src: bytes, dst: bytes, nxt: int, payload: bytes) -> bytes:
+    plen = len(payload)
+    return bytes([0x60, 0, 0, 0]) + struct.pack("!HBB", plen, nxt, 64) + src + dst + payload
+
+
+def tcp_syn_v6_frame() -> bytes:
+    src_m = bytes.fromhex("020000000001")
+    dst_m = bytes.fromhex("020000000002")
+    src = bytes.fromhex("fd000000000000000000000000000001")
+    dst = bytes.fromhex("fd000000000000000000000000000002")
+    return eth(dst_m, src_m, 0x86DD, ipv6(src, dst, 6, tcp_syn(34612, 5201)))
+
+
 def runt() -> bytes:
     return bytes.fromhex("0200000000020200000000010800") + b"short"
 
@@ -107,7 +120,7 @@ def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("out", nargs="?", default="ci.pcap")
     args = p.parse_args()
-    frames = [arp_request(), tcp_syn_frame(), vxlan_frame(), runt()]
+    frames = [arp_request(), tcp_syn_frame(), vxlan_frame(), runt(), tcp_syn_v6_frame()]
     blob = pcap_hdr() + b"".join(rec(f, i) for i, f in enumerate(frames))
     with open(args.out, "wb") as f:
         f.write(blob)

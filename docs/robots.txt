@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://khademullah.github.io/Pcap2HDL/sitemap.xml

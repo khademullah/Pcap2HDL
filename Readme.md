@@ -4,11 +4,11 @@
 
 # Pcap2HDL
 
-Replay captured network traces in a cycle-accurate SystemVerilog simulation.
+Replay Wireshark or tcpdump Ethernet **PCAP** files into cycle-accurate **SystemVerilog HDL** in **Verilator**.
 
-Pcap2HDL streams `.pcap` files into Verilator through DPI-C (`libpcap`). Each captured byte is driven on an AXI-Stream-like bus (`tdata`, `tkeep`, `tvalid`, `tready`, `tstart`, `tlast`) so hardware under test can see the same frames a NIC would, with simulation time frozen for debug. Default width is 8 bits (one byte per cycle); `make AXIS_W=64` packs eight bytes per beat. DUT modules accept a beat only when `tvalid && tready`.
+Pcap2HDL streams `.pcap` files into Verilator through DPI-C (`libpcap`). Each captured byte is driven on an AXI-Stream-like bus (`tdata`, `tkeep`, `tvalid`, `tready`, `tstart`, `tlast`) so hardware under test can see the same frames a NIC would, with simulation time frozen for debug. Default width is 8 bits (one byte per cycle); `make AXIS_W=64` packs eight bytes per beat. DUT modules accept a beat only when `tvalid && tready`. This is **offline pcap replay**, not live sniff, and not GL Communications proprietary `.HDL` file conversion.
 
-Typical uses: early bring-up of FPGA or ASIC packet pipelines (classification, DPI, RoCE-aware paths) before silicon or a live Ethernet port is available.
+Typical uses: early bring-up of FPGA or ASIC packet pipelines (classification, DPI, RoCE-aware paths) in Verilog/SystemVerilog before silicon or a live Ethernet port is available.
 
 Current release: [0.6.0](CHANGELOG.md). Project site: [khademullah.github.io/Pcap2HDL](https://khademullah.github.io/Pcap2HDL/). Architecture (DPI-C, AXI-Stream, parser metadata): [architecture](https://khademullah.github.io/Pcap2HDL/architecture.html). Bring your own NIC: [nic](https://khademullah.github.io/Pcap2HDL/nic.html). Demo (16:9): [pcap2hdl-demo.mp4](https://khademullah.github.io/Pcap2HDL/pcap2hdl-demo.mp4).
 

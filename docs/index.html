@@ -4,13 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Pcap2HDL — packet traces to HDL simulation</title>
-  <meta name="description" content="Replay Ethernet pcaps into Verilator through DPI-C. 0.6.0: IPv6 base header and 802.1Q; 0.4.0 Bring your own NIC.">
+  <meta name="description" content="Pcap2HDL replays Ethernet PCAP files from Wireshark or tcpdump into cycle-accurate SystemVerilog (HDL) in Verilator via DPI-C and AXI-Stream. Offline pcap, not live sniff. IPv6, 802.1Q, optional NIC RX slave. Not GL Communications .HDL conversion.">
   <link rel="canonical" href="https://khademullah.github.io/Pcap2HDL/">
   <meta name="robots" content="index,follow">
+  <meta name="keywords" content="Pcap2HDL, pcap, PCAP, Wireshark, tcpdump, Verilator, SystemVerilog, Verilog, HDL, AXI-Stream, DPI-C, libpcap, NIC, FPGA, ASIC">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Pcap2HDL">
-  <meta property="og:title" content="Pcap2HDL — packet traces to HDL simulation">
-  <meta property="og:description" content="Replay Ethernet pcaps into Verilator through DPI-C onto AXI-Stream. IPv6, 802.1Q, optional nic_rx slave.">
+  <meta property="og:title" content="Pcap2HDL — Wireshark PCAP to SystemVerilog HDL (Verilator)">
+  <meta property="og:description" content="Replay Ethernet pcap captures into Verilator SystemVerilog over AXI-Stream through DPI-C. Offline file replay, not live capture.">
   <meta property="og:url" content="https://khademullah.github.io/Pcap2HDL/">
   <meta property="og:image" content="https://khademullah.github.io/Pcap2HDL/pcap2hdl-logo-hero.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -20,6 +21,21 @@
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "Pcap2HDL",
+    "alternateName": [
+      "pcap to HDL",
+      "PCAP to SystemVerilog",
+      "pcap Verilator",
+      "pcap to Verilog",
+      "pcap to SystemVerilog",
+      "Wireshark pcap to HDL",
+      "tcpdump pcap Verilator",
+      "libpcap DPI-C",
+      "pcap AXI-Stream",
+      "pcap replay FPGA",
+      "pcap ASIC verification",
+      "Ethernet pcap HDL simulation",
+      "packet capture to RTL"
+    ],
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "Linux",
     "license": "https://opensource.org/licenses/MIT",
@@ -30,7 +46,7 @@
       "name": "Khadem Ullah",
       "url": "https://github.com/khademullah"
     },
-    "description": "Replay Ethernet pcaps into Verilator through DPI-C onto an AXI-Stream for pre-silicon packet pipelines."
+    "description": "Open-source tool to replay Wireshark or tcpdump Ethernet PCAP files into Verilator SystemVerilog HDL through DPI-C onto AXI-Stream. Offline pcap replay for FPGA and ASIC packet pipelines. Not live sniff. Not GL Communications HDL file conversion."
   }
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -66,10 +82,10 @@
       <div>
         <img class="hero-mark" src="pcap2hdl-logo-hero.png" alt="Pcap2HDL — Packet traces to HDL simulation">
         <p class="kicker">Release 0.6.0</p>
-        <h1>Packet traces to cycle-accurate HDL</h1>
+        <h1>Packet traces (PCAP) to cycle-accurate HDL</h1>
         <p class="lede">
-          Stream a captured <code>.pcap</code>
-          into Verilator through DPI-C. Hardware under test sees the same Ethernet frames a NIC would,
+          Replay a Wireshark or tcpdump <code>.pcap</code> (PCAP) into
+          Verilator SystemVerilog through DPI-C. Hardware under test sees the same Ethernet frames a NIC would,
           on an AXI-Stream bus, with simulation time frozen for debug.
         </p>
         <div class="cta">
@@ -105,7 +121,8 @@
       <h2>Built for early network silicon bring-up</h2>
       <p class="sub">
         Use it when an FPGA or ASIC packet pipeline needs real traffic before a live port exists.
-        Classification, DPI, RoCE-aware paths, and RSS can be gated on traces you already captured.
+        Classification, DPI, RoCE-aware paths, and RSS can be gated on traces you already captured
+        in Wireshark or tcpdump, then replayed into Verilog/SystemVerilog HDL in Verilator.
       </p>
       <div class="cards">
         <article class="card">

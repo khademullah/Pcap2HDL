@@ -3,14 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Architecture — Pcap2HDL</title>
-  <meta name="description" content="How Pcap2HDL moves a Wireshark pcap through DPI-C into a cycle-accurate AXI-Stream, then into parser, trackers, and C-versus-HDL scoreboards.">
+  <title>Architecture — Pcap2HDL PCAP to SystemVerilog (DPI-C, AXI-Stream)</title>
+  <meta name="description" content="Pcap2HDL architecture: Wireshark or tcpdump PCAP through libpcap and DPI-C into cycle-accurate SystemVerilog HDL on AXI-Stream in Verilator. Parser, trackers, C-versus-HDL scoreboards.">
   <link rel="canonical" href="https://khademullah.github.io/Pcap2HDL/architecture.html">
   <meta name="robots" content="index,follow">
+  <meta name="keywords" content="Pcap2HDL, pcap, Wireshark, Verilator, SystemVerilog, HDL, DPI-C, AXI-Stream">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Pcap2HDL">
-  <meta property="og:title" content="Architecture — Pcap2HDL">
-  <meta property="og:description" content="How Pcap2HDL moves a pcap through DPI-C into a cycle-accurate AXI-Stream, then into parser, trackers, and C-versus-HDL scoreboards.">
+  <meta property="og:title" content="Architecture — Pcap2HDL PCAP to SystemVerilog">
+  <meta property="og:description" content="How a Wireshark pcap moves through DPI-C into cycle-accurate SystemVerilog HDL on AXI-Stream.">
   <meta property="og:url" content="https://khademullah.github.io/Pcap2HDL/architecture.html">
   <meta property="og:image" content="https://khademullah.github.io/Pcap2HDL/pcap2hdl-logo-hero.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -55,10 +56,10 @@
     <div class="wrap">
       <p class="crumb"><a href="index.html">Home</a> / Architecture</p>
       <p class="kicker">Release 0.6.0</p>
-      <h1>From pcap to DUT</h1>
+      <h1>From PCAP to SystemVerilog DUT</h1>
       <p class="lede">
-        The capture file is never opened in SystemVerilog. libpcap reads it in C.
-        The testbench is an AXI-Stream master. With <code>make NIC=1</code>,
+        The Wireshark or tcpdump capture file is never opened in SystemVerilog HDL. libpcap reads the pcap in C.
+        The testbench is an AXI-Stream master in Verilator. With <code>make NIC=1</code>,
         <code>nic_rx</code> is the AXIS slave (it drives <code>tready</code>).
         Other DUT modules snoop the same beats; they do not pass frames to one another.
         Trackers and RSS sit on

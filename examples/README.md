@@ -35,7 +35,7 @@ Related commands (no dedicated log file; gates must match the parent capture):
 | `make BP=1` | Bench `tready` low every other cycle |
 | `make BP=2` | Extra random `tready`, AND-ed with the slave when `NIC=1` |
 | `make PACE=1` | IFG from pcap timestamps, capped by `PACE_MAX_US` (default 100) |
-| `make AXIS_W=64` | Eight-byte beats; rebuilds; DUT counts unchanged |
+| `make AXIS_W=64` | Eight-byte beats; rebuilds; DUT counts unchanged; much less sim time on jumbo/TSO frames |
 | `make FILTER='tcp port 5201'` | libpcap BPF; HDL only sees matches (`matched` / `skipped`) |
 | `make FILTER='udp'` | See [bpf_udp.log](bpf_udp.log) |
 | `make PCAP=soft_roce.pcap FILTER='udp port 4791'` | Keep RoCE, drop other UDP/TCP |
@@ -58,7 +58,38 @@ Related commands (no dedicated log file; gates must match the parent capture):
 | `[NIC]` | End of run | `off` without `NIC=1`. With the flag: `rx`, `drop`, `byte_mis`, `mis` |
 | `[COV]` | End of run | Size bins and TCP flag / RoCE opcode coverage (not SystemVerilog `covergroup`) |
 
-**Size class** (`pkt_size_filter`, `tkeep` popcount): runt &lt; 64, standard 64–1518, jumbo above that. A 54-byte IPv4 TCP SYN is **runt** even though headers parsed; that is length, not a parse fail.
+**Size class** (`pkt_size_filter`, `tkeep` popcount): runt &lt; 64, standard 64–1500, jumbo **&gt; 1500** (`JUMBO_THRESH`). A 54-byte IPv4 TCP SYN is **runt** even though headers parsed; that is length, not a parse fail.
+
+### Jumbo frames and Verilator time
+
+`JUMBO` is only a length label. It does not run extra protocol logic. Default `DATA_W=8` is one byte per clock, so a 29026-byte iperf payload is about **29 000 beats**. Two of those cost as much sim time as hundreds of 66-byte ACKs.
+
+Those sizes are typical **TSO/GSO**: the host hands tcpdump one large TCP segment, not a 1500-byte Ethernet frame. Example log shape:
+
+```text
+[SV] Processing Packet #27 (captured 66 / wire 66 bytes)
+[DUT] Classified packet: 66 bytes -> STANDARD
+[SV] Processing Packet #28 (captured 29026 / wire 29026 bytes)
+[DUT] Classified packet: 29026 bytes ->    JUMBO
+```
+
+Do not drop jumbo in the DUT to go faster: those frames carry TCP payload; skipping them breaks `SEQ_OK`.
+
+Faster replay, same DUT counts:
+
+```bash
+make AXIS_W=64 MAX_PACKETS=50
+```
+
+That is eight bytes per beat (~3628 beats for a 29026-byte frame instead of ~29026). Rebuilds.
+
+Capture MTU-sized frames instead of TSO blobs (then recapture iperf):
+
+```bash
+sudo ethtool -K veth0 tso off gso off gro off
+```
+
+Use the veth (or NIC) name you dump with tcpdump. `FILTER='tcp port 5201'` still streams jumbo data frames if they match. Cap work with `MAX_PACKETS`.
 
 **`iplen` vs frame length:** Untagged Ethernet 14 + IP total length. One 802.1Q tag: **18** + IP. IPv4 total length is the IPv4 header field. IPv6 `iplen` in the log is **40 + payload length**. Example: 94-byte untagged IPv6 SYN → `iplen=80`.
 

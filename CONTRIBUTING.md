@@ -35,11 +35,11 @@ See Status in [Readme.md](Readme.md) and “Not in this release” under 0.6.0 i
 3. **More traces in `examples/`** — UDP, failed TCP handshake, truncated or malformed frames. Keep `*.pcap` gitignored; commit the log and a short note in `examples/README.md`. Capture with `tcpdump` or `scripts/soft_roce_veth.sh`.
 4. **Docs** — typos, plusargs, architecture notes. Bring your own NIC landed in 0.4.0 (`hdl/nic_rx.sv`, [docs/nic.html](docs/nic.html)). Do not rename `nic_rx` / `make NIC=1` in a drive-by.
 
-IPv4 header checksum landed in 0.4.0 (`CSUM mis=0`). Live sniff, host CSRs, and Ethernet FCS stay out unless a note in CHANGELOG says otherwise.
+IPv4 header checksum landed in 0.4.0 (`CSUM mis=0`). Live sniff and Ethernet FCS stay out unless a note in CHANGELOG says otherwise. `nic_rx` has a three-word AXI-Lite map (CTRL/STATUS/OCC) and `irq_rx`; that is not a full host BAR.
 
 ## Stretch work (landed)
 
-Keep gates green (`mis=0`, TCP `seq_ok`, RoCE `icrc ok`). Do not replace the DPI-C bench with a UVM env.
+Keep gates green (`mis=0`, TCP `seq_ok`, RoCE `icrc ok`). Do not replace the DPI-C bench with an Accellera UVM env. Optional agent BFMs (`tb_axis_monitor`, `tb_csr_axil_m`, `tb_irq_monitor`) sit beside the replay; they are not `uvm_agent`.
 
 ### Verification
 

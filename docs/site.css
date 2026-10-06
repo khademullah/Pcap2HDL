@@ -312,6 +312,58 @@ pre.mermaid {
   padding: 0.5rem 0;
   overflow: visible;
   font-size: 1rem;
+  min-width: 100%;
+}
+.flow-chart .mermaid svg {
+  max-width: 100%;
+  height: auto;
+  overflow: visible;
+}
+/* Keep full label text inside navy nodes (no mid-word clip). */
+.flow-chart .mermaid .node,
+.flow-chart .mermaid .node .label,
+.flow-chart .mermaid .node .label-container,
+.flow-chart .mermaid .node foreignObject,
+.flow-chart .mermaid .node rect {
+  overflow: visible !important;
+}
+.flow-chart .mermaid .node .label,
+.flow-chart .mermaid .node .label-container,
+.flow-chart .mermaid .node foreignObject,
+.flow-chart .mermaid .node clipPath,
+.flow-chart .mermaid .node [clip-path] {
+  clip-path: none !important;
+}
+/* Light labels on navy nodes (SVG text when htmlLabels is false). */
+.flow-chart .mermaid .nodeLabel,
+.flow-chart .mermaid .node .label,
+.flow-chart .mermaid .node text,
+.flow-chart .mermaid .label text {
+  fill: #e8f0f7 !important;
+  color: #e8f0f7 !important;
+}
+.flow-chart .mermaid .nodeLabel *,
+.flow-chart .mermaid foreignObject,
+.flow-chart .mermaid foreignObject div,
+.flow-chart .mermaid foreignObject span {
+  color: #e8f0f7 !important;
+  overflow: visible !important;
+}
+.flow-chart .mermaid .edgeLabel,
+.flow-chart .mermaid .edgeLabel span,
+.flow-chart .mermaid .edgeLabel p,
+.flow-chart .mermaid .edgeLabel text {
+  fill: #0c2340 !important;
+  color: #0c2340 !important;
+  background-color: #ffffff !important;
+}
+.flow-chart .mermaid .flowchart-link,
+.flow-chart .mermaid path.path {
+  stroke: #2f8f86 !important;
+}
+.flow-chart .mermaid .marker {
+  fill: #2f8f86 !important;
+  stroke: #2f8f86 !important;
 }
 .note { color: var(--muted); font-size: 0.92rem; margin: 0.8rem 0 0; }
 
@@ -438,6 +490,11 @@ img.li-icon {
 }
 .page-hero .lede + .lede {
   margin-top: 1rem;
+}
+.page-hero code {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  padding: 0.1em 0.4em;
 }
 .crumb {
   margin: 0 0 0.85rem;

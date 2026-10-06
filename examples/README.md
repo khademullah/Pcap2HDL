@@ -18,12 +18,87 @@ Regenerate a log by running the command in the first line of that file (`$ make 
 | [traffic_8pkt.log](traffic_8pkt.log) | `make MAX_PACKETS=8` | `ipv4=8 ipv6=0 tcp=8 hs=1 seq_ok=5 seq_err=0` `CSUM ok=8 mis=0` `RSS mis=0` `[NIC] off` |
 | [soft_roce_8pkt.log](soft_roce_8pkt.log) | `make PCAP=soft_roce.pcap MAX_PACKETS=8` | `roce=8 msg=1 ack=1 psn_gap=0 icrc ok=8` `CSUM mis=0` |
 | [soft_roce_16pkt.log](soft_roce_16pkt.log) | `make PCAP=soft_roce.pcap MAX_PACKETS=16` | `roce=16 msg=3 ack=3 icrc ok=16` |
-| [ci_nic.log](ci_nic.log) | `python3 scripts/gen_pcap.py ci.pcap && make NIC=1 PCAP=ci.pcap MAX_PACKETS=8 BP=2` | streamed 7; `arp=1 vxlan=1 ipv6=2 vlan=2 trunc=1` `CSUM mis=0` `RSS mis=0` `[NIC] rx=7 mis=0` |
+| [ci_nic.log](ci_nic.log) | `python3 scripts/gen_pcap.py ci.pcap && make NIC=1 PCAP=ci.pcap MAX_PACKETS=8 BP=2` | streamed 7; `arp=1 vxlan=1 ipv6=2 vlan=2 trunc=1` `CSUM mis=0` `RSS mis=0` `[NIC] rx=7 mis=0` `[CSR] STATUS=7 mis=0` `[IRQ] pulses=7 mis=0` `[AXIS] pkts=7 mis=0` |
 | [ipv6_20pkt.log](ipv6_20pkt.log) | `make NIC=1 PCAP=ns1_iperf6.pcap MAX_PACKETS=20` | `ipv6=20 tcp=17 hs=2 seq_ok=11 seq_err=0` `CSUM skip=20 mis=0` `RSS mis=0` `[NIC] rx=20` |
 | [soft_roce_gtkwave.jpg](soft_roce_gtkwave.jpg) | `make PCAP=soft_roce.pcap MAX_PACKETS=8` then `make wave` | `hdr_is_roce`, UDP dest `0x12b7` (4791) |
 | [../docs/wireshark_replay.png](../docs/wireshark_replay.png) | `make DUMP=replay.pcap` then open `replay.pcap` | Same Ethernet frames the AXIS master accepted |
 | [bpf_udp.log](bpf_udp.log) | `make FILTER='udp'` | streamed 0; `matched=0 skipped=1000` on `traffic.pcap` |
 | [../docs/gtkwave_8pkt.jpg](../docs/gtkwave_8pkt.jpg) | `make MAX_PACKETS=8` then `make wave` | `tvalid` / `tstart` / `tlast` bursts |
+
+## pyuvm path
+
+Separate target: `make pyuvm`. Sources: [tb/pyuvm/](../tb/pyuvm/). DUT is `nic_rx` in `hdl/tb_uvm_nic.sv`.
+
+| File | Command | Gate |
+|------|---------|------|
+| [pyuvm.log](pyuvm.log) | `make pyuvm PCAP=ci.pcap MAX_PACKETS=8` | `NicPyuvmTest` PASS; seven CI frames; `tlast` and `irq_rx` match |
+
+One-time venv:
+
+```bash
+python3 -m venv /tmp/pcap2hdl-pyuvm
+/tmp/pcap2hdl-pyuvm/bin/pip install 'cocotb==1.9.2' pyuvm
+```
+
+Then:
+
+```bash
+make pyuvm MAX_PACKETS=8
+make pyuvm FILTER='tcp' MAX_PACKETS=8
+```
+
+**`make pyuvm MAX_PACKETS=8`**
+
+Opens `traffic.pcap` with no BPF. Streams the **first 8 frames** as they sit in the file (any EtherType). UVM drives those bytes into **`nic_rx`**. Pass when `tlast` and `irq_rx` both equal 8 (`PcapSeq streamed 8 frames; tlast and irq match`).
+
+**`make pyuvm FILTER='tcp' MAX_PACKETS=8`**
+
+Same path, with BPF `tcp` first. Non-TCP frames stay in the file; the next **8 TCP** frames go into `nic_rx`. Pass when `tlast` and `irq_rx` both equal 8.
+
+Shared steps: libpcap (`dpi/pcap_reader.c`) → one AXIS beat per byte → `nic_rx` `tready` handshake → `irq_rx` on each `tlast`. Site diagrams: [docs/pyuvm.html](../docs/pyuvm.html).
+
+```mermaid
+flowchart TB
+  pcap["traffic.pcap"]
+  dpi["dpi/pcap_reader.c<br/>libpcap · optional FILTER"]
+  seq["PcapSeq<br/>one beat per captured byte"]
+  drv["AxisDriver<br/>tvalid / tdata / tstart / tlast"]
+  nic["nic_rx<br/>s_tready · irq_rx on tlast"]
+  mon["AxisMonitor"]
+  sb["scoreboard<br/>frames = tlast = irq_rx"]
+
+  pcap --> dpi
+  dpi -->|"MAX_PACKETS=8"| seq
+  seq --> drv
+  drv -->|"AXI-Stream"| nic
+  nic -->|"tready"| drv
+  drv -.-> mon
+  nic -->|"irq_rx"| sb
+  mon -->|"tlast handshake"| sb
+```
+
+**UVM layout (same run)**
+
+```mermaid
+flowchart LR
+  test["NicPyuvmTest"] --> env["NicEnv"]
+  env --> agent["AxisAgent"]
+  env --> sb["IrqScoreboard"]
+  agent --> seqr["sequencer"]
+  agent --> drv["driver"]
+  agent --> mon["monitor"]
+  seqr --> drv
+  mon --> sb
+```
+
+Same knobs as replay: `PCAP`, `MAX_PACKETS`, `FILTER`. If `PCAP` is missing, `scripts/gen_pcap.py` writes `ci.pcap`.
+
+```bash
+make pyuvm
+make pyuvm MAX_PACKETS=8
+make pyuvm PCAP=ci.pcap MAX_PACKETS=8
+make pyuvm FILTER='tcp' MAX_PACKETS=8
+```
 
 Related commands (no dedicated log file; gates must match the parent capture):
 
@@ -35,13 +110,14 @@ Related commands (no dedicated log file; gates must match the parent capture):
 | `make BP=1` | Bench `tready` low every other cycle |
 | `make BP=2` | Extra random `tready`, AND-ed with the slave when `NIC=1` |
 | `make PACE=1` | IFG from pcap timestamps, capped by `PACE_MAX_US` (default 100) |
-| `make AXIS_W=64` | Eight-byte beats; rebuilds; DUT counts unchanged; much less sim time on jumbo/TSO frames |
+| `make AXIS_W=64` | Eight-byte beats (Pcap2HDL knob, not an AMBA-mandated width); rebuilds; DUT counts unchanged; less sim time on jumbo/TSO |
 | `make FILTER='tcp port 5201'` | libpcap BPF; HDL only sees matches (`matched` / `skipped`) |
 | `make FILTER='udp'` | See [bpf_udp.log](bpf_udp.log) |
 | `make PCAP=soft_roce.pcap FILTER='udp port 4791'` | Keep RoCE, drop other UDP/TCP |
 | `make NIC=1 PCAP=ns1_vlan100.pcap MAX_PACKETS=20` | Local 802.1Q IPv4 iperf; dump parent veth (see below) |
 | `make NIC=1 PCAP=ns1_vlan100_ip6.pcap MAX_PACKETS=20` | Local 802.1Q IPv6 iperf; same parent dump (`ether proto 0x8100`) |
-| `make PCAP=replay.pcap` | Replay a `DUMP=` file; DUT summary must match the dump source |
+| `make pyuvm MAX_PACKETS=8` | First 8 frames of `traffic.pcap` into `nic_rx`; `tlast` and `irq_rx` must equal 8 |
+| `make pyuvm FILTER='tcp' MAX_PACKETS=8` | Eight TCP frames from `traffic.pcap` into `nic_rx`; `tlast` and `irq_rx` must equal 8 |
 
 ## How to read a log line
 
@@ -56,6 +132,9 @@ Related commands (no dedicated log file; gates must match the parent capture):
 | `[TRK]` | RoCE tracker | `OK`, `MSG_DONE`, `ACK_OK`, `PSN_ERR`, `PSN_GAP` |
 | `[DUT]` | `tlast` or summary | Size class, `LEN_MISMATCH`, ICRC hex, end-of-run counters |
 | `[NIC]` | End of run | `off` without `NIC=1`. With the flag: `rx`, `drop`, `byte_mis`, `mis` |
+| `[CSR]` | `NIC=1` | CTRL write/read at start; STATUS vs `[NIC] rx` at the end |
+| `[IRQ]` | `NIC=1` | `irq_rx` pulses vs `[NIC] rx` |
+| `[AXIS]` | End of run | Monitor `tvalid && tready && tlast` vs streamed count |
 | `[COV]` | End of run | Size bins and TCP flag / RoCE opcode coverage (not SystemVerilog `covergroup`) |
 
 **Size class** (`pkt_size_filter`, `tkeep` popcount): runt &lt; 64, standard 64–1500, jumbo **&gt; 1500** (`JUMBO_THRESH`). A 54-byte IPv4 TCP SYN is **runt** even though headers parsed; that is length, not a parse fail.
@@ -82,6 +161,8 @@ make AXIS_W=64 MAX_PACKETS=50
 ```
 
 That is eight bytes per beat (~3628 beats for a 29026-byte frame instead of ~29026). Rebuilds.
+
+AMBA AXI4-Stream (IHI 0051) does **not** fix `TDATA` at 8 or 64 bits. Width is any whole number of bytes; `TKEEP` marks valid bytes in a beat. `DATA_W=8` (default) and `make AXIS_W=64` are **Pcap2HDL knobs**, not AMBA modes. A product NIC may use 32, 128, 256, or 512 bits and still be AXI-Stream; those widths are not in this repo. `AXIS_W=64` is eight-byte packing on the same handshake (`tvalid` / `tready` / `tkeep` / `tlast`). DUT protocol counts must match `AXIS_W=8`.
 
 Capture MTU-sized frames instead of TSO blobs (then recapture iperf):
 
@@ -275,6 +356,9 @@ make NIC=1 PCAP=ci.pcap MAX_PACKETS=8 BP=2
 make NIC=1 PCAP=ns1_iperf6.pcap MAX_PACKETS=20
 make NIC=1 PCAP=ns1_vlan100.pcap MAX_PACKETS=20
 make NIC=1 PCAP=ns1_vlan100_ip6.pcap MAX_PACKETS=20
+make pyuvm
+make pyuvm MAX_PACKETS=8
+make pyuvm FILTER='tcp' MAX_PACKETS=8
 make wave
 make clean
 ```

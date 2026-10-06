@@ -7,7 +7,7 @@
   <meta name="description" content="Pcap2HDL replays Ethernet PCAP files from Wireshark or tcpdump into cycle-accurate SystemVerilog (HDL) in Verilator via DPI-C and AXI-Stream. Offline pcap, not live sniff. IPv6, 802.1Q, optional NIC RX slave. Not GL Communications .HDL conversion.">
   <link rel="canonical" href="https://khademullah.github.io/Pcap2HDL/">
   <meta name="robots" content="index,follow">
-  <meta name="keywords" content="Pcap2HDL, pcap, PCAP, Wireshark, tcpdump, Verilator, SystemVerilog, Verilog, HDL, AXI-Stream, DPI-C, libpcap, NIC, FPGA, ASIC">
+  <meta name="keywords" content="Pcap2HDL, pcap, PCAP, Wireshark, tcpdump, Verilator, SystemVerilog, Verilog, HDL, AXI-Stream, DPI-C, libpcap, NIC, FPGA, ASIC, pyuvm, cocotb, UVM, nic_rx">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Pcap2HDL">
   <meta property="og:title" content="Pcap2HDL — Wireshark PCAP to SystemVerilog HDL (Verilator)">
@@ -34,7 +34,13 @@
       "pcap replay FPGA",
       "pcap ASIC verification",
       "Ethernet pcap HDL simulation",
-      "packet capture to RTL"
+      "packet capture to RTL",
+      "pyuvm pcap",
+      "pcap pyuvm Verilator",
+      "pyuvm AXI-Stream nic_rx",
+      "pcap UVM scoreboard",
+      "pyuvm cocotb pcap",
+      "make pyuvm"
     ],
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "Linux",
@@ -46,7 +52,7 @@
       "name": "Khadem Ullah",
       "url": "https://github.com/khademullah"
     },
-    "description": "Open-source tool to replay Wireshark or tcpdump Ethernet PCAP files into Verilator SystemVerilog HDL through DPI-C onto AXI-Stream. Offline pcap replay for FPGA and ASIC packet pipelines. Not live sniff. Not GL Communications HDL file conversion."
+    "description": "Open-source tool to replay Wireshark or tcpdump Ethernet PCAP files into Verilator SystemVerilog HDL through DPI-C onto AXI-Stream. Optional make pyuvm path: same libpcap capture through a pyuvm AXIS agent into nic_rx with tlast and irq_rx scoreboard. Offline pcap replay for FPGA and ASIC packet pipelines. Not live sniff. Not GL Communications HDL file conversion."
   }
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -64,6 +70,7 @@
       <nav>
         <a href="architecture.html">Architecture</a>
         <a class="hide-sm" href="nic.html">Bring your own NIC</a>
+        <a class="hide-sm" href="pyuvm.html">pyuvm</a>
         <a class="hide-sm" href="#overview">Overview</a>
         <a class="hide-sm" href="#pipeline">Pipeline</a>
         <a class="hide-sm" href="#dut">DUT</a>
@@ -92,6 +99,7 @@
           <a class="btn btn-solid" href="https://github.com/khademullah/Pcap2HDL">View repository</a>
           <a class="btn btn-ghost" href="architecture.html">Architecture</a>
           <a class="btn btn-ghost" href="nic.html">Bring your own NIC</a>
+          <a class="btn btn-ghost" href="pyuvm.html">pyuvm</a>
           <a class="btn btn-ghost" href="#demo">Watch demo</a>
         </div>
         <p class="meta">0.6.0 · IPv6 and 802.1Q · MIT · Linux / Verilator 5.032+</p>
@@ -304,6 +312,7 @@ make AXIS_W=64 PCAP=soft_roce.pcap</pre>
       <div class="cta gap">
         <a class="btn btn-navy" href="architecture.html">Architecture</a>
         <a class="btn btn-line" href="nic.html">Bring your own NIC</a>
+        <a class="btn btn-line" href="pyuvm.html">pyuvm path</a>
         <a class="btn btn-line" href="https://github.com/khademullah/Pcap2HDL/blob/main/CONTRIBUTING.md">Contributing guide</a>
         <a class="btn btn-line" href="https://github.com/khademullah/Pcap2HDL/blob/main/CHANGELOG.md">Release notes</a>
         <a class="btn btn-line" href="https://github.com/khademullah/Pcap2HDL/blob/main/LICENSE">MIT License</a>

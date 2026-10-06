@@ -1,0 +1,8 @@
+$ make pyuvm PCAP=ci.pcap MAX_PACKETS=8
+[C-DPI] Successfully opened /home/khadem/Pcap2HDL/ci.pcap
+     0.00ns INFO     cocotb.regression                  Found test test_nic_pyuvm.NicPyuvmTest
+     0.00ns INFO     cocotb.regression                  running NicPyuvmTest (1/1)
+  8610.00ns INFO     cocotb                             PcapSeq streamed 7 frames; tlast and irq match
+  8610.00ns INFO     cocotb.regression                  NicPyuvmTest passed
+                                                        ** test_nic_pyuvm.NicPyuvmTest    PASS        8610.00
+                                                        ** TESTS=1 PASS=1 FAIL=0 SKIP=0

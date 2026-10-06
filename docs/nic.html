@@ -45,6 +45,7 @@
         <a href="index.html">Home</a>
         <a href="architecture.html">Architecture</a>
         <a class="nav-current" href="nic.html" aria-current="page">Bring your own NIC</a>
+        <a class="hide-sm" href="pyuvm.html">pyuvm</a>
         <a class="hide-sm" href="index.html#build">Build</a>
         <a class="btn btn-solid" href="https://github.com/khademullah/Pcap2HDL">GitHub</a>
       </nav>
@@ -309,8 +310,8 @@
           The in-tree template is ingress credits, not a 400GbE MAC.
           Occupancy rises on an accepted beat and falls one beat per cycle
           (host drain). <code>s_tready</code> drops when almost full, when
-          <code>pause_en</code> toggles (<code>NIC_PAUSE=1</code>), or when
-          <code>ready_mask</code> is 0. On <code>s_tlast</code> it pulses
+          <code>pause_en</code> toggles (<code>NIC_PAUSE=1</code>), when
+          <code>ready_mask</code> is 0, or when CSR <code>rx_en</code> is 0. On <code>s_tlast</code> it pulses
           <code>rx_pkt_valid</code> with a byte count from <code>tkeep</code>.
           The testbench compares that length to <code>pkt_size_filter</code>.
         </p>
@@ -362,7 +363,7 @@
           <code>s_tready</code> is 0 whenever <code>bubble</code> is 1, so the NIC
           accepts a beat only every other cycle (50% ready), even if the FIFO is not full.
         </p>
-        <pre>s_tready = rst_n && ready_mask && !bubble && !almost_full</pre>
+          <pre>s_tready = rst_n && rx_en && ready_mask && !bubble && !almost_full</pre>
         <table>
           <thead>
             <tr><th>Knob</th><th>Who stalls</th><th>Typical use</th></tr>
@@ -397,8 +398,12 @@ make NIC=1 NIC_PAUSE=1</pre>
         <p>
           <code>rx</code> must equal streamed packets. <code>byte_mis=0</code> means
           the same length as <code>pkt_size_filter</code> on each <code>tlast</code>.
-          Per-packet lines stay <code>[DUT] Classified</code>; there is no per-packet
-          <code>[NIC]</code> print.
+          With <code>NIC=1</code> the log also has
+          <code>[CSR] STATUS=</code> and <code>[IRQ] pulses=</code> equal to
+          <code>rx</code>, and <code>[AXIS] pkts=</code> equal to streamed
+          (BFMs, not Accellera UVM). AXI-Lite map:
+          <code>0x00</code> CTRL, <code>0x04</code> STATUS, <code>0x08</code> OCC.
+          There is no DMA or MDIO agent.
         </p>
       </section>
 
@@ -407,14 +412,15 @@ make NIC=1 NIC_PAUSE=1</pre>
         <ol>
           <li>Keep <code>make NIC=1</code> (or add your file in the Makefile <code>ifeq ($(NIC),1)</code> block).</li>
           <li>Replace <code>u_nic_rx</code> inside <code>ifdef EN_NIC</code> in <code>hdl/tb_pcap_dpi.sv</code>.</li>
-          <li>Ports: <code>s_tdata</code>, <code>s_tkeep</code>, <code>s_tvalid</code>, <code>s_tready</code> (out),
-            <code>s_tstart</code>, <code>s_tlast</code>, <code>s_tuser</code>, <code>s_tuser_err</code>,
-            <code>ready_mask</code>.</li>
+          <li>Ports: AXIS <code>s_*</code> as before, plus AXI-Lite
+            <code>s_axil_*</code> and <code>irq_rx</code> if you keep the in-tree CSR BFM.
+            Tie AXI-Lite unused if your RX has no BAR yet (drive <code>rx_en</code> as 1 inside).</li>
           <li>Do not open the pcap in HDL. Use <code>PCAP=</code>.</li>
           <li>Leave <code>u_snoop</code> unless you are replacing the scoreboards too.</li>
         </ol>
         <div class="cta gap">
           <a class="btn btn-navy" href="https://github.com/khademullah/Pcap2HDL/blob/main/hdl/nic_rx.sv">nic_rx.sv</a>
+          <a class="btn btn-line" href="pyuvm.html">pyuvm path</a>
           <a class="btn btn-line" href="architecture.html">Architecture</a>
           <a class="btn btn-line" href="index.html">Project site</a>
         </div>
@@ -433,7 +439,7 @@ make NIC=1 NIC_PAUSE=1</pre>
         </a>
       </section>
       <div class="foot-inner">
-        <span>Pcap2HDL 0.4.0 · MIT · <a href="index.html">Home</a> · <a href="architecture.html">Architecture</a> · Bring your own NIC</span>
+        <span>Pcap2HDL 0.4.0 · MIT · <a href="index.html">Home</a> · <a href="architecture.html">Architecture</a> · <a href="pyuvm.html">pyuvm</a> · Bring your own NIC</span>
         <span>No capture files are published on this site.</span>
       </div>
     </div>

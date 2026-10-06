@@ -1,3 +1,4 @@
+[CSR] CTRL wr=0x5 rd=0x5
 [SV] Opening ci.pcap
 [C-DPI] Successfully opened ci.pcap
 [SV] Datalink DLT=1 (Ethernet)
@@ -49,4 +50,7 @@
 [DUT] CSUM     ok=3  err=0  skip=4  mis=0
 [DUT] RSS     q0=4  q1=0  q2=0  q3=1  mis=0  skip=2
 [NIC] rx=7  drop=0  byte_mis=0  csum_side=0  occ_max=1  mis=0
+[CSR] STATUS=7  mis=0
+[IRQ] pulses=7  mis=0
+[AXIS] pkts=7  beats=419  mis=0
 [COV] size    runt=4  standard=3  jumbo=0  tcp SYN=4 ACK=0 FIN=0 RST=0  roce send=0 ack=0

@@ -4,5 +4,11 @@ obj_dir/
 !examples/*.log
 *.pcap
 .venv/
+tb/pyuvm/sim_build/
+tb/pyuvm/run.env
+tb/pyuvm/libpcap_dpi.so
+tb/pyuvm/results.xml
+tb/pyuvm/results.xml
+tb/pyuvm/__pycache__/
 coverage.dat
 coverage/

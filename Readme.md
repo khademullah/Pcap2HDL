@@ -31,7 +31,10 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 | `hdl/` | SystemVerilog testbench and DUT |
 | `hdl/tb_pcap_dpi.sv` | DPI imports, AXI-Stream master, plusargs |
 | `hdl/pkt_snoop.sv` | Observer hierarchy (filter, parser, trackers, ICRC, RSS, csum) |
-| `hdl/nic_rx.sv` | Optional AXIS slave; compiled only with `make NIC=1` |
+| `hdl/nic_rx.sv` | Optional AXIS slave + AXI-Lite + `irq_rx`; compiled only with `make NIC=1` |
+| `hdl/tb_axis_monitor.sv` | AXIS RX monitor BFM (`tlast` count) |
+| `hdl/tb_csr_axil_m.sv` | AXI-Lite master BFM (not Accellera UVM) |
+| `hdl/tb_irq_monitor.sv` | IRQ pulse counter |
 | `hdl/pkt_size_filter.sv` | Frame length: runt / standard / jumbo |
 | `hdl/pkt_header_parser.sv` | L2–L4 parse; TCP; Soft-RoCE BTH |
 | `hdl/pkt_roce_tracker.sv` | RoCE PSN / MSG_DONE / ACK_OK |
@@ -56,7 +59,8 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
                                │    u_filter / u_parser / u_tcp / u_tracker
                                │    u_icrc / u_rss / u_csum
                                └─ u_nic_rx           [only if make NIC=1]
-                                  drives tready
+                                  drives tready; AXI-Lite + irq_rx
+                            u_axis_mon / u_csr / u_irq_mon   [BFMs]
                             dump.pcap <- libpcap (optional)
 ```
 
@@ -70,7 +74,7 @@ GTKWave is optional (`make wave`). Soft-RoCE capture additionally needs `rdma-co
 8. `pkt_roce_icrc` checks the last 4 bytes of a complete RoCEv2 frame (masked CRC32). Truncated captures are skipped.
 9. `pkt_rss` computes Microsoft Toeplitz RSS on the IPv4 4-tuple (queue = hash % 4). DPI-C hashes the same bytes into `tuser`; `mis` must stay 0.
 10. `pkt_ip_csum` folds the IPv4 header (RFC 1071) and compares with DPI-C (`CSUM mis=0`). `tuser_err` flags a C-side checksum fail without changing the RSS hash.
-11. `make NIC=1` instantiates `u_nic_rx` under `tb_pcap_dpi`. Without the flag, `nic_rx.sv` is not compiled and the log prints `[NIC] off`.
+11. `make NIC=1` instantiates `u_nic_rx` under `tb_pcap_dpi`. Without the flag, `nic_rx.sv` is not compiled and the log prints `[NIC] off`. The CSR BFM writes CTRL `0x5` (`rx_en` + `irq_en`) then reads STATUS; `[AXIS]` / `[CSR]` / `[IRQ]` must `mis=0`. DMA and MDIO are not present.
 
 ## Build and run
 
@@ -94,8 +98,13 @@ make FILTER='tcp port 5201'       # libpcap BPF; HDL only sees matches
 make FILTER='udp'                 # no UDP in traffic.pcap; streamed 0
 make PCAP=soft_roce.pcap FILTER='udp port 4791'
 make wave                         # GTKWave on simulation_trace.vcd
+make pyuvm                        # pcap → UVM AXIS driver (tb/pyuvm)
+make pyuvm MAX_PACKETS=8          # first 8 frames of traffic.pcap into nic_rx
+make pyuvm FILTER='tcp' MAX_PACKETS=8   # 8 TCP frames into nic_rx; irq/tlast match
 make clean
 ```
+
+pyuvm data path and UVM layout: [tb/pyuvm/README.md](tb/pyuvm/README.md), site: [docs/pyuvm.html](https://khademullah.github.io/Pcap2HDL/pyuvm.html).
 
 Traces are selected at runtime; a rebuild is not required when only `PCAP` or `MAX_PACKETS` changes. Changing `AXIS_W` or `NIC` rebuilds.
 
@@ -112,7 +121,7 @@ Build with `make NIC=1`. `hdl/nic_rx.sv` is compiled and `u_nic_rx` is the slave
 5. Keep `make NIC=1` (or add your file next to `nic_rx.sv` in the `ifeq ($(NIC),1)` block).
 6. Gate: `[NIC] rx=` equals streamed packets, `drop=0`, `byte_mis=0`, `mis=0`.
 
-`NIC_PAUSE=1` (with `NIC=1`) is a slave-side stall inside `nic_rx`: each clock toggles `bubble`, so `s_tready` is 0 every other cycle even if the FIFO is not full (`s_tready = rst_n && ready_mask && !bubble && !almost_full`). That is not `BP`: `BP=1`/`BP=2` is bench `ready_mask`. Default `NIC_PAUSE=0` leaves `bubble` at 0. Packet counts and `[NIC] mis=0` should still match `NIC_PAUSE=0` if the slave only advances on `s_tvalid && s_tready`. Your RX can tie `pause_en` off. Details: [nic.html](https://khademullah.github.io/Pcap2HDL/nic.html#pause).
+`NIC_PAUSE=1` (with `NIC=1`) is a slave-side stall inside `nic_rx`: each clock toggles `bubble`, so `s_tready` is 0 every other cycle even if the FIFO is not full (`s_tready = rst_n && rx_en && ready_mask && !bubble && !almost_full`). That is not `BP`: `BP=1`/`BP=2` is bench `ready_mask`. CSR bit `pause_csr` ORs with `pause_en`. Default `NIC_PAUSE=0` leaves `bubble` at 0. Packet counts and `[NIC] mis=0` should still match `NIC_PAUSE=0` if the slave only advances on `s_tvalid && s_tready`. Your RX can tie `pause_en` off. Details: [nic.html](https://khademullah.github.io/Pcap2HDL/nic.html#pause).
 
 This is an ingress example (credits + frame length), not a 400GbE MAC. Diagrams: [docs/nic.html](https://khademullah.github.io/Pcap2HDL/nic.html).
 
@@ -282,7 +291,7 @@ Packets 1–3 are ICMPv6 (multicast, hop 255). Two iperf TCP sessions (`44432` a
 - RSS: Toeplitz 4-tuple in C and HDL (`tuser`); four queues, `mis=0` (IPv6 32/36-byte key input)
 - ARP (`0x0806`) and VXLAN (UDP/4789, VNI, inner Ethernet)
 - Replay: optional `+PACE=1` IFG from pcap timestamps (capped); `AXIS_W=64` eight-byte beats; slave `tready` from `nic_rx` AND `+BP=1`/`+BP=2`; `+NIC_PAUSE=1` stalls inside the slave; `DUMP=` writes the bus back to a pcap; `FILTER=` is libpcap BPF (`pcap_offline_filter`) with `matched` / `skipped` counts
-- Bring your own NIC: optional `nic_rx` AXIS slave (`make NIC=1`); observers under `u_snoop`
+- Bring your own NIC: optional `nic_rx` AXIS slave (`make NIC=1`); observers under `u_snoop`; AXI-Lite CTRL/STATUS/OCC + `irq_rx`; agent BFMs `[AXIS]` / `[CSR]` / `[IRQ]` (not Accellera UVM)
 - Coverage print `[COV]` size / TCP flags / RoCE opcodes. CI: `.github/workflows/ci.yml` + `scripts/gen_pcap.py`
 
 Still parked: QinQ, IPv6 extension headers. See [CHANGELOG.md](CHANGELOG.md). How to contribute: [CONTRIBUTING.md](CONTRIBUTING.md).

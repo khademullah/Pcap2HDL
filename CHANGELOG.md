@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+Agent-shaped BFMs beside the DPI-C replay (not Accellera UVM; Verilator has no `uvm_pkg` here).
+
+### DUT / bench
+
+- `nic_rx` AXI-Lite: `0x00` CTRL (`rx_en`, `pause_csr`, `irq_en`), `0x04` STATUS (frame count), `0x08` OCC. Reset defaults `rx_en=1`, `irq_en=1` so existing `make NIC=1` still streams.
+- `s_tready = rst_n && rx_en && ready_mask && !bubble && !almost_full`. `pause_csr` ORs with `NIC_PAUSE`.
+- `irq_rx` is a one-cycle pulse on `rx_pkt_valid` when `irq_en`.
+- BFMs: `tb_axis_monitor` (always), `tb_csr_axil_m` + `tb_irq_monitor` with `NIC=1`. DPI-C still drives AXIS. No DMA and no MDIO (no pins).
+- Gate: `[AXIS] pkts=` equals streamed, `[CSR] STATUS=` equals `[NIC] rx=`, `[IRQ] pulses=` equals `rx`, all `mis=0`.
+
+### How to check
+
+```bash
+python3 scripts/gen_pcap.py ci.pcap
+make NIC=1 PCAP=ci.pcap MAX_PACKETS=8 BP=2
+# [CSR] CTRL wr=0x5 rd=0x5
+# [NIC] rx=7 … mis=0
+# [CSR] STATUS=7  mis=0
+# [IRQ] pulses=7  mis=0
+# [AXIS] pkts=7  … mis=0
+```
+
 ## 0.6.0
 
 Single 802.1Q tag on the replay path: IPv4 and IPv6 after EtherType `0x8100`.
@@ -32,7 +54,7 @@ make NIC=1 PCAP=ns1_vlan100_ip6.pcap MAX_PACKETS=20
 
 ### Not in this release
 
-QinQ, IPv6 extension headers, Ethernet FCS, live capture, host CSR map.
+QinQ, IPv6 extension headers, Ethernet FCS, live capture. Host CSR is the three-word AXI-Lite map on `nic_rx` only (not a full NIC BAR).
 
 ## 0.5.0
 

@@ -125,6 +125,28 @@ module tb_pcap_dpi #(
     wire        nic_err;
     wire        nic_drop;
     wire [15:0] nic_occ;
+    wire        nic_irq;
+    wire [31:0] axis_pkt_count;
+    wire [31:0] axis_beat_count;
+    wire [31:0] irq_pulse_count;
+
+    wire [7:0]  axil_awaddr;
+    wire        axil_awvalid;
+    wire        axil_awready;
+    wire [31:0] axil_wdata;
+    wire [3:0]  axil_wstrb;
+    wire        axil_wvalid;
+    wire        axil_wready;
+    wire [1:0]  axil_bresp;
+    wire        axil_bvalid;
+    wire        axil_bready;
+    wire [7:0]  axil_araddr;
+    wire        axil_arvalid;
+    wire        axil_arready;
+    wire [31:0] axil_rdata;
+    wire [1:0]  axil_rresp;
+    wire        axil_rvalid;
+    wire        axil_rready;
 
     int pkt_len;
     int pkt_wire;
@@ -146,6 +168,14 @@ module tb_pcap_dpi #(
     int n_arp, n_vxlan;
     int n_csum_ok, n_csum_err, n_csum_skip, n_csum_mis;
     int n_nic, n_nic_drop, n_nic_byte_mis, n_nic_err;
+    int n_axis_mis, n_csr_mis, n_irq_mis;
+    logic        csr_req;
+    logic        csr_req_write;
+    logic [7:0]  csr_req_addr;
+    logic [31:0] csr_req_wdata;
+    logic        csr_done;
+    logic [31:0] csr_rsp_rdata;
+    logic [1:0]  csr_rsp_resp;
     int nic_pause_arg;
     int nic_occ_max;
     int n_cov_syn, n_cov_ack, n_cov_fin, n_cov_rst;
@@ -310,6 +340,24 @@ module tb_pcap_dpi #(
         .s_tuser_err(tuser_err),
         .ready_mask(bp_ready),
         .pause_en(nic_pause_arg != 0),
+        .s_axil_awaddr(axil_awaddr),
+        .s_axil_awvalid(axil_awvalid),
+        .s_axil_awready(axil_awready),
+        .s_axil_wdata(axil_wdata),
+        .s_axil_wstrb(axil_wstrb),
+        .s_axil_wvalid(axil_wvalid),
+        .s_axil_wready(axil_wready),
+        .s_axil_bresp(axil_bresp),
+        .s_axil_bvalid(axil_bvalid),
+        .s_axil_bready(axil_bready),
+        .s_axil_araddr(axil_araddr),
+        .s_axil_arvalid(axil_arvalid),
+        .s_axil_arready(axil_arready),
+        .s_axil_rdata(axil_rdata),
+        .s_axil_rresp(axil_rresp),
+        .s_axil_rvalid(axil_rvalid),
+        .s_axil_rready(axil_rready),
+        .irq_rx(nic_irq),
         .rx_pkt_valid(nic_pkt_valid),
         .rx_bytes(nic_bytes),
         .rx_hash(nic_hash),
@@ -327,6 +375,108 @@ module tb_pcap_dpi #(
     assign nic_err       = 1'b0;
     assign nic_drop      = 1'b0;
     assign nic_occ       = 16'd0;
+    assign nic_irq       = 1'b0;
+    assign axil_awready  = 1'b0;
+    assign axil_wready   = 1'b0;
+    assign axil_bresp    = 2'b00;
+    assign axil_bvalid   = 1'b0;
+    assign axil_arready  = 1'b0;
+    assign axil_rdata    = 32'd0;
+    assign axil_rresp    = 2'b00;
+    assign axil_rvalid   = 1'b0;
+`endif
+
+    tb_axis_monitor u_axis_mon (
+        .clk(clk),
+        .rst_n(rst_n),
+        .tvalid(tvalid),
+        .tready(tready),
+        .tlast(tlast),
+        .pkt_count(axis_pkt_count),
+        .beat_count(axis_beat_count)
+    );
+
+`ifdef EN_NIC
+    tb_csr_axil_m u_csr (
+        .clk(clk),
+        .rst_n(rst_n),
+        .req(csr_req),
+        .req_write(csr_req_write),
+        .req_addr(csr_req_addr),
+        .req_wdata(csr_req_wdata),
+        .done(csr_done),
+        .rsp_rdata(csr_rsp_rdata),
+        .rsp_resp(csr_rsp_resp),
+        .awaddr(axil_awaddr),
+        .awvalid(axil_awvalid),
+        .awready(axil_awready),
+        .wdata(axil_wdata),
+        .wstrb(axil_wstrb),
+        .wvalid(axil_wvalid),
+        .wready(axil_wready),
+        .bresp(axil_bresp),
+        .bvalid(axil_bvalid),
+        .bready(axil_bready),
+        .araddr(axil_araddr),
+        .arvalid(axil_arvalid),
+        .arready(axil_arready),
+        .rdata(axil_rdata),
+        .rresp(axil_rresp),
+        .rvalid(axil_rvalid),
+        .rready(axil_rready)
+    );
+
+    tb_irq_monitor u_irq_mon (
+        .clk(clk),
+        .rst_n(rst_n),
+        .irq(nic_irq),
+        .pulse_count(irq_pulse_count)
+    );
+`else
+    assign axil_awaddr  = 8'd0;
+    assign axil_awvalid = 1'b0;
+    assign axil_wdata   = 32'd0;
+    assign axil_wstrb   = 4'd0;
+    assign axil_wvalid  = 1'b0;
+    assign axil_bready  = 1'b0;
+    assign axil_araddr  = 8'd0;
+    assign axil_arvalid = 1'b0;
+    assign axil_rready  = 1'b0;
+    assign irq_pulse_count = 32'd0;
+    assign csr_done = 1'b0;
+    assign csr_rsp_rdata = 32'd0;
+    assign csr_rsp_resp  = 2'b00;
+`endif
+
+`ifdef EN_NIC
+    task automatic csr_do_write(input logic [7:0] addr, input logic [31:0] data);
+        begin
+            csr_req_write = 1'b1;
+            csr_req_addr  = addr;
+            csr_req_wdata = data;
+            @(negedge clk);
+            csr_req = 1'b1;
+            @(posedge clk);
+            @(negedge clk);
+            csr_req = 1'b0;
+            while (!csr_done)
+                @(posedge clk);
+        end
+    endtask
+
+    task automatic csr_do_read(input logic [7:0] addr);
+        begin
+            csr_req_write = 1'b0;
+            csr_req_addr  = addr;
+            @(negedge clk);
+            csr_req = 1'b1;
+            @(posedge clk);
+            @(negedge clk);
+            csr_req = 1'b0;
+            while (!csr_done)
+                @(posedge clk);
+        end
+    endtask
 `endif
 
     always #5 clk = ~clk;
@@ -621,6 +771,13 @@ module tb_pcap_dpi #(
         n_nic_drop = 0;
         n_nic_byte_mis = 0;
         n_nic_err = 0;
+        n_axis_mis = 0;
+        n_csr_mis = 0;
+        n_irq_mis = 0;
+        csr_req = 1'b0;
+        csr_req_write = 1'b0;
+        csr_req_addr = 8'd0;
+        csr_req_wdata = 32'd0;
         nic_pause_arg = 0;
         nic_occ_max = 0;
         n_cov_syn = 0;
@@ -661,6 +818,16 @@ module tb_pcap_dpi #(
         #20;
         rst_n = 1;
         #10;
+
+`ifdef EN_NIC
+        csr_do_write(8'h00, 32'h5);
+        csr_do_read(8'h00);
+        if (csr_rsp_rdata[2:0] != 3'b101)
+            n_csr_mis = n_csr_mis + 1;
+        if (csr_rsp_resp != 2'b00)
+            n_csr_mis = n_csr_mis + 1;
+        $display("[CSR] CTRL wr=0x5 rd=0x%0h", csr_rsp_rdata);
+`endif
 
         $display("[SV] Opening %s", pcap_name);
         if (pcap_name.len() == 0 || open_pcap(pcap_name) != 0) begin
@@ -803,9 +970,21 @@ module tb_pcap_dpi #(
         $display("[NIC] rx=%0d  drop=%0d  byte_mis=%0d  csum_side=%0d  occ_max=%0d  mis=%0d",
                  n_nic, n_nic_drop, n_nic_byte_mis, n_nic_err, nic_occ_max,
                  (n_nic != packet_count) || (n_nic_drop != 0) || (n_nic_byte_mis != 0));
+        csr_do_read(8'h04);
+        if (csr_rsp_rdata != 32'(n_nic))
+            n_csr_mis = n_csr_mis + 1;
+        if (irq_pulse_count != 32'(n_nic))
+            n_irq_mis = n_irq_mis + 1;
+        $display("[CSR] STATUS=%0d  mis=%0d", csr_rsp_rdata, n_csr_mis);
+        $display("[IRQ] pulses=%0d  mis=%0d", irq_pulse_count, n_irq_mis);
 `else
         $display("[NIC] off  (rebuild with make NIC=1)");
+        $display("[CSR] off");
+        $display("[IRQ] off");
 `endif
+        n_axis_mis = (axis_pkt_count != 32'(packet_count)) ? 1 : 0;
+        $display("[AXIS] pkts=%0d  beats=%0d  mis=%0d",
+                 axis_pkt_count, axis_beat_count, n_axis_mis);
         $display("[COV] size    runt=%0d  standard=%0d  jumbo=%0d  tcp SYN=%0d ACK=%0d FIN=%0d RST=%0d  roce send=%0d ack=%0d",
                  n_runt, n_standard, n_jumbo, n_cov_syn, n_cov_ack, n_cov_fin, n_cov_rst,
                  n_cov_op_send, n_cov_op_ack);

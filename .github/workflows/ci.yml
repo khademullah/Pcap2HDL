@@ -23,6 +23,11 @@ jobs:
         run: grep -q "Streamed 7 packets" simulation.log
       - name: NIC RX slave accepted the same frames
         run: grep -q "\\[NIC\\] rx=7  drop=0  byte_mis=0" simulation.log
+      - name: Agent BFMs agree with NIC RX
+        run: |
+          grep -q "\\[AXIS\\] pkts=7" simulation.log
+          grep -q "\\[CSR\\] STATUS=7  mis=0" simulation.log
+          grep -q "\\[IRQ\\] pulses=7  mis=0" simulation.log
       - name: ARP / VXLAN / IPv6 / VLAN / checksum
         run: |
           grep -q "arp=1" simulation.log

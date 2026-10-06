@@ -21,7 +21,10 @@ SV_SOURCES = \
 	$(HDL_DIR)/pkt_tcp_tracker.sv \
 	$(HDL_DIR)/pkt_roce_icrc.sv \
 	$(HDL_DIR)/pkt_rss.sv \
-	$(HDL_DIR)/pkt_ip_csum.sv
+	$(HDL_DIR)/pkt_ip_csum.sv \
+	$(HDL_DIR)/tb_axis_monitor.sv \
+	$(HDL_DIR)/tb_irq_monitor.sv \
+	$(HDL_DIR)/tb_csr_axil_m.sv
 ifeq ($(NIC),1)
 SV_SOURCES += $(HDL_DIR)/nic_rx.sv
 endif
@@ -89,6 +92,33 @@ run: compile
 	fi
 	./obj_dir/V$(TOP_MODULE) +MAX_PACKETS=$(MAX_PACKETS) +PCAP="$(PCAP)" +PACE=$(PACE) +PACE_MAX_US=$(PACE_MAX_US) +BP=$(BP) +NIC_PAUSE=$(NIC_PAUSE) $(if $(DUMP),+DUMP="$(DUMP)",) $(if $(FILTER),+FILTER="$(FILTER)",) | tee $(LOG_FILE)
 
+# Separate path: pyuvm + cocotb on nic_rx (tb/pyuvm). Default `make` does not run this.
+PYUVM_VENV ?= /tmp/pcap2hdl-pyuvm
+.PHONY: pyuvm
+pyuvm:
+	@if [ ! -x "$(PYUVM_VENV)/bin/cocotb-config" ]; then \
+		echo "[MAKE] Create the pyuvm venv once, then retry:"; \
+		echo "  python3 -m venv $(PYUVM_VENV)"; \
+		echo "  $(PYUVM_VENV)/bin/pip install 'cocotb==1.9.2' pyuvm"; \
+		exit 1; \
+	fi
+	@echo "[MAKE] pyuvm path → tb/pyuvm (pcap via dpi/pcap_reader.c)"
+	@pcap="$(PCAP)"; \
+	if [ ! -f "$$pcap" ]; then \
+		echo "[MAKE] $$pcap missing; writing ci.pcap"; \
+		python3 scripts/gen_pcap.py ci.pcap; \
+		pcap=ci.pcap; \
+	fi; \
+	case $$pcap in /*) ;; *) pcap="$(CURDIR)/$$pcap";; esac; \
+	echo "[MAKE] PCAP=$$pcap MAX_PACKETS=$(MAX_PACKETS)"; \
+	printf 'PCAP=%s\nMAX_PACKETS=%s\nFILTER=%s\n' "$$pcap" "$(MAX_PACKETS)" "$(FILTER)" > tb/pyuvm/run.env; \
+	$(MAKE) -C tb/pyuvm
+
+.PHONY: pyuvm-clean
+pyuvm-clean:
+	@if [ -f tb/pyuvm/Makefile ]; then $(MAKE) -C tb/pyuvm clean; fi
+
+
 # Open generated trace file in GTKWave waveform viewer
 .PHONY: wave
 wave:
@@ -117,10 +147,12 @@ help:
 	@echo "  make run PACE=1                 - IFG from pcap timestamps"
 	@echo "  make run BP=1                   - AXI-Stream tready 50% backpressure"
 	@echo "  make run BP=2                   - random tready"
-	@echo "  make run NIC=1                 - compile nic_rx AXIS slave + [NIC] summary"
+	@echo "  make run NIC=1                 - compile nic_rx AXIS slave + CSR/IRQ BFMs + [NIC] summary"
 	@echo "  make run NIC=1 NIC_PAUSE=1     - slave toggles s_tready"
 	@echo "  make run AXIS_W=64              - 8-byte AXI-Stream beats (rebuilds)"
 	@echo "  make run DUMP=replay.pcap       - write AXI-Stream frames back to pcap"
 	@echo "  make run FILTER='tcp port 5201' - libpcap BPF before the HDL stream"
 	@echo "  make wave     - Open simulation trace in GTKWave background"
+	@echo "  make pyuvm MAX_PACKETS=8               - first 8 frames into nic_rx"
+	@echo "  make pyuvm FILTER='tcp' MAX_PACKETS=8  - 8 TCP frames into nic_rx"
 	@echo "  make clean    - Remove build artifacts, waveforms, and logs"

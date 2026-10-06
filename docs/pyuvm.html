@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>pyuvm path — Pcap2HDL pcap to nic_rx (UVM classes)</title>
+  <meta name="description" content="Pcap2HDL make pyuvm: libpcap bytes through dpi/pcap_reader.c into a pyuvm AXIS agent driving nic_rx. Scoreboard: frames equal tlast equal irq_rx.">
+  <link rel="canonical" href="https://khademullah.github.io/Pcap2HDL/pyuvm.html">
+  <meta name="robots" content="index,follow">
+  <meta name="keywords" content="Pcap2HDL, pyuvm, UVM, cocotb, pcap, Verilator, SystemVerilog, nic_rx, AXI-Stream">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Pcap2HDL">
+  <meta property="og:title" content="pyuvm path — Pcap2HDL pcap to nic_rx">
+  <meta property="og:description" content="pcap → libpcap → PcapSeq → AxisDriver → nic_rx. Monitor and scoreboard check tlast and irq_rx.">
+  <meta property="og:url" content="https://khademullah.github.io/Pcap2HDL/pyuvm.html">
+  <meta property="og:image" content="https://khademullah.github.io/Pcap2HDL/pcap2hdl-logo-hero.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="pcap2hdl-icon.png">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "name": "pyuvm path — Pcap2HDL",
+    "url": "https://khademullah.github.io/Pcap2HDL/pyuvm.html",
+    "isPartOf": {
+      "@type": "WebSite",
+      "name": "Pcap2HDL",
+      "url": "https://khademullah.github.io/Pcap2HDL/"
+    }
+  }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="site.css">
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    // Size boxes after webfonts load so labels are not clipped mid-word.
+    await document.fonts.ready;
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: "base",
+      themeVariables: {
+        primaryColor: "#0c2340",
+        primaryTextColor: "#e8f0f7",
+        primaryBorderColor: "#2f8f86",
+        secondaryColor: "#122f4d",
+        secondaryTextColor: "#e8f0f7",
+        tertiaryColor: "#163a5c",
+        tertiaryTextColor: "#e8f0f7",
+        lineColor: "#2f8f86",
+        textColor: "#0c2340",
+        mainBkg: "#0c2340",
+        nodeBkg: "#0c2340",
+        nodeTextColor: "#e8f0f7",
+        edgeLabelBackground: "#ffffff",
+        fontFamily: "\"Source Sans 3\", \"Segoe UI\", Helvetica, sans-serif",
+        fontSize: "15px"
+      },
+      flowchart: {
+        htmlLabels: false,
+        curve: "basis",
+        padding: 28,
+        nodeSpacing: 56,
+        rankSpacing: 60,
+        wrappingWidth: 640,
+        useMaxWidth: true
+      }
+    });
+    await mermaid.run({ querySelector: ".mermaid" });
+  </script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap top-inner">
+      <a class="brand" href="index.html">
+        <img src="pcap2hdl-icon.png" width="36" height="36" alt="">
+        Pcap2HDL
+      </a>
+      <nav>
+        <a href="index.html">Home</a>
+        <a href="architecture.html">Architecture</a>
+        <a class="hide-sm" href="nic.html">Bring your own NIC</a>
+        <a class="nav-current" href="pyuvm.html" aria-current="page">pyuvm</a>
+        <a class="hide-sm" href="index.html#build">Build</a>
+        <a class="btn btn-solid" href="https://github.com/khademullah/Pcap2HDL">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="page-hero" id="top">
+    <div class="wrap">
+      <p class="crumb"><a href="index.html">Home</a> / <a href="architecture.html">Architecture</a> / pyuvm</p>
+      <p class="kicker">Separate path · make pyuvm</p>
+      <h1>pcap into nic_rx through UVM classes</h1>
+      <p class="lede">
+        This page is a separate UVM-class path on the same <code>nic_rx</code>
+        pins: sequences and the scoreboard live in Python (pyuvm + cocotb),
+        so you can practice a standard agent stack and handshake checks without
+        changing the DPI-C main gate.
+        <code>make pyuvm</code> opens a capture with the same <code>dpi/pcap_reader.c</code>
+        libpcap path, then a pyuvm AXIS agent drives <code>nic_rx</code>.
+        The scoreboard checks that streamed frames, <code>tlast</code> handshakes,
+        and <code>irq_rx</code> pulses match. Default <code>make</code> (DPI-C
+        master under <code>tb_pcap_dpi</code>) stays the main gate.
+      </p>
+    </div>
+  </section>
+
+  <div class="doc-layout wrap">
+    <aside class="doc-toc" aria-label="On this page">
+      <p>On this page</p>
+      <a href="#path">Data path</a>
+      <a href="#uvm">UVM layout</a>
+      <a href="#run">Commands</a>
+      <a href="#gate">Gate</a>
+    </aside>
+
+    <article class="doc">
+      <section id="path">
+        <h2>Data path</h2>
+        <p>
+          <code>make pyuvm MAX_PACKETS=8</code> is this pipeline: pcap bytes →
+          UVM sequence → AXIS driver → <code>nic_rx</code>, with a monitor and
+          scoreboard on the same bus.
+        </p>
+        <figure class="flow-chart" aria-label="pcap to nic_rx through pyuvm">
+          <pre class="mermaid">
+flowchart TB
+  pcap["traffic.pcap"]
+  dpi["dpi/pcap_reader.c<br/>libpcap · optional FILTER"]
+  seq["PcapSeq<br/>one beat per captured byte"]
+  drv["AxisDriver<br/>tvalid / tdata / tstart / tlast"]
+  nic["nic_rx<br/>s_tready · irq_rx on tlast"]
+  mon["AxisMonitor"]
+  sb["scoreboard<br/>frames = tlast = irq_rx"]
+
+  pcap --> dpi
+  dpi -->|"MAX_PACKETS=8"| seq
+  seq --> drv
+  drv -->|"AXI-Stream"| nic
+  nic -->|"tready"| drv
+  drv -.-> mon
+  nic -->|"irq_rx"| sb
+  mon -->|"tlast handshake"| sb
+          </pre>
+          <figcaption>
+            Bytes stay in C (libpcap). The DUT stays SystemVerilog. UVM owns stimulus, handshake, and the frame / IRQ check.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section id="uvm">
+        <h2>UVM layout</h2>
+        <p>
+          Same run as a classic agent stack: test → env → agent (sequencer,
+          driver, monitor) and a scoreboard.
+        </p>
+        <figure class="flow-chart" aria-label="pyuvm component hierarchy">
+          <pre class="mermaid">
+flowchart LR
+  test["NicPyuvmTest"] --> env["NicEnv"]
+  env --> agent["AxisAgent"]
+  env --> sb["IrqScoreboard"]
+  agent --> seqr["sequencer"]
+  agent --> drv["driver"]
+  agent --> mon["monitor"]
+  seqr --> drv
+  mon --> sb
+          </pre>
+          <figcaption>
+            Sources under <code>tb/pyuvm/</code>. DUT wrapper: <code>hdl/tb_uvm_nic.sv</code>.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section id="run">
+        <h2>Commands</h2>
+        <p>One-time venv, then only <code>make pyuvm</code>:</p>
+        <pre>python3 -m venv /tmp/pcap2hdl-pyuvm
+/tmp/pcap2hdl-pyuvm/bin/pip install 'cocotb==1.9.2' pyuvm
+make pyuvm MAX_PACKETS=8
+make pyuvm FILTER='tcp' MAX_PACKETS=8
+make pyuvm PCAP=ci.pcap MAX_PACKETS=8</pre>
+        <table>
+          <thead>
+            <tr><th>Command</th><th>What it streams</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>make pyuvm MAX_PACKETS=8</code></td>
+              <td>First 8 frames of <code>traffic.pcap</code> (any EtherType) into <code>nic_rx</code></td>
+            </tr>
+            <tr>
+              <td><code>make pyuvm FILTER='tcp' MAX_PACKETS=8</code></td>
+              <td>Eight TCP frames from <code>traffic.pcap</code> into <code>nic_rx</code></td>
+            </tr>
+            <tr>
+              <td><code>make pyuvm PCAP=ci.pcap MAX_PACKETS=8</code></td>
+              <td>CI synthetic pcap (seven frames if the file ends first)</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>
+          Shared knobs with the DPI-C bench: <code>PCAP</code>, <code>MAX_PACKETS</code>,
+          <code>FILTER</code>. Missing <code>PCAP</code> writes <code>ci.pcap</code>
+          via <code>scripts/gen_pcap.py</code>.
+        </p>
+      </section>
+
+      <section id="gate">
+        <h2>Gate</h2>
+        <p>
+          Pass when streamed frames, <code>tlast</code> handshakes, and
+          <code>irq_rx</code> pulses are equal:
+        </p>
+        <pre>PcapSeq streamed 8 frames; tlast and irq match
+NicPyuvmTest passed</pre>
+        <p>
+          Reference log: <a href="https://github.com/khademullah/Pcap2HDL/blob/main/examples/pyuvm.log">examples/pyuvm.log</a>.
+          Repo notes: <a href="https://github.com/khademullah/Pcap2HDL/blob/main/tb/pyuvm/README.md">tb/pyuvm/README.md</a>.
+        </p>
+        <div class="cta gap">
+          <a class="btn btn-navy" href="https://github.com/khademullah/Pcap2HDL/tree/main/tb/pyuvm">tb/pyuvm</a>
+          <a class="btn btn-line" href="nic.html">Bring your own NIC</a>
+          <a class="btn btn-line" href="architecture.html">Architecture</a>
+          <a class="btn btn-line" href="index.html">Project site</a>
+        </div>
+      </section>
+    </article>
+  </div>
+
+  <footer class="foot">
+    <div class="wrap">
+      <section class="contact" id="contact" aria-labelledby="contact-heading">
+        <h2 id="contact-heading">Contact</h2>
+        <p class="contact-lead">Khadem Ullah. Issues for the repo stay on GitHub; professional contact is LinkedIn.</p>
+        <a class="contact-link" href="https://www.linkedin.com/in/khademullah" rel="me noopener noreferrer">
+          <img class="li-icon" src="linkedin.svg" width="28" height="28" alt="">
+          linkedin.com/in/khademullah
+        </a>
+      </section>
+      <div class="foot-inner">
+        <span>Pcap2HDL · MIT · <a href="index.html">Home</a> · <a href="architecture.html">Architecture</a> · <a href="nic.html">NIC</a> · pyuvm</span>
+        <span>No capture files are published on this site.</span>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

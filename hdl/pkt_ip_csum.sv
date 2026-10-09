@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Khadem Ullah
+
 // IPv4 header checksum (RFC 1071). Same fold as dpi/pcap_reader.c.
 // Ones-complement sum of the IHL words, including the checksum field,
 // must fold to 16'hffff. Skips a single 802.1Q tag before the IPv4 header.

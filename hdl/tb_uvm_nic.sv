@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Khadem Ullah
+
 // Thin wrapper for the pyuvm sandbox (tb/pyuvm). Not used by `make`.
 // Clock and AXIS come from Python; AXI-Lite is idle so reset defaults apply.
 

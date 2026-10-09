@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Khadem Ullah
+
 // Streaming packet-length classifier.
 // Counts AXI-Stream tkeep bits (DATA_W=8 is one byte per cycle).
 // Advances only on tvalid && tready.

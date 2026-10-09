@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Khadem Ullah
+
 // Streaming Ethernet / 802.1Q / IPv4 / IPv6 / L4 parser.
 // One VLAN tag (EtherType 0x8100); QinQ is not handled. L3 starts at 14 or 18.
 // IPv6 is the 40-byte base header only (no hop-by-hop / routing / fragment).

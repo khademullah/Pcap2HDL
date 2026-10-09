@@ -75,4 +75,4 @@ python3 scripts/gen_pcap.py ci.pcap
 make PCAP=ci.pcap MAX_PACKETS=8 BP=2
 ```
 
-Do not add a GUI. Match the existing log style (`[SV]`, `[DUT]`, `[C-DPI]`). License is MIT (`LICENSE`).
+Do not add a GUI. Match the existing log style (`[SV]`, `[DUT]`, `[C-DPI]`). License is AGPL-3.0-only (`LICENSE`).

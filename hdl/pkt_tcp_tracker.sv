@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Khadem Ullah
+
 // TCP handshake and next-sequence tracker.
 // One CAM entry per 4-tuple {src_ip, dst_ip, src_port, dst_port}. SYN-ACK and
 // later reverse traffic look up the swapped tuple. After SYN, each direction

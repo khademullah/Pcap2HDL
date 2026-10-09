@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Khadem Ullah
+
 // Observer hierarchy: AXIS snoops + parser-metadata clients.
 // Does not drive tready. Instantiated as u_snoop under tb_pcap_dpi.
 

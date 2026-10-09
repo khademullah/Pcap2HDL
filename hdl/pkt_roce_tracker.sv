@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Khadem Ullah
+
 // Per-QP RoCEv2 send-sequence tracker.
 // Sessions are keyed by {src_ip, dst_ip, dest_qp}. ACK looks up the reverse
 // pair so a pingpong (two directions, same QP number) does not mix PSN spaces.

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (c) 2026 Khadem Ullah
+
 # Soft-RoCE on a host veth pair (no netns), using ibv_rc_pingpong.
 #   sudo ./scripts/soft_roce_veth.sh setup
 #   sudo ./scripts/soft_roce_veth.sh demo

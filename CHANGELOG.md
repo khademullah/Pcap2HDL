@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### License
+
+- **AGPL-3.0-only** (replaces MIT). Full text in `LICENSE`; short notice in `COPYING`.
+
 Agent-shaped BFMs beside the DPI-C replay (not Accellera UVM; Verilator has no `uvm_pkg` here).
 
 ### DUT / bench

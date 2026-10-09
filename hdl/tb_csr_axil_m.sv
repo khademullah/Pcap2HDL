@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Khadem Ullah
+
 // AXI-Lite CSR master (agent-shaped BFM, not Accellera UVM).
 // Clocked req/done FSM so Verilator --timing can schedule it.
 

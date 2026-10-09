@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (c) 2026 Khadem Ullah
+
 """ctypes front to dpi/pcap_reader.c (same libpcap path as the DPI-C bench)."""
 
 from __future__ import annotations

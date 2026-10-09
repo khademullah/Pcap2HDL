@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (c) 2026 Khadem Ullah
+
 """pyuvm AXIS agent on nic_rx; pcap bytes from dpi/pcap_reader.c."""
 
 from cocotb.clock import Clock

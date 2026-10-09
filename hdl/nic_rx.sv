@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Khadem Ullah
+
 // Example NIC RX: AXI-Stream *slave* (drives tready).
 // Swap this module for your MAC/RX; keep the s_* port list.
 // Occupancy is a credit FIFO: the host side drains one beat per cycle.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Khadem Ullah
+
 // RoCEv2 invariant CRC on the last 4 bytes of a complete frame.
 // Seed 0xdebb20e3 is CRC32 of a masked 8-byte LRH. Mask TOS/TTL/IPv4
 // checksum, UDP checksum, and BTH resv8a (dest-QP high byte). Compare

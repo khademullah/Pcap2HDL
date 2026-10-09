@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Khadem Ullah
+
 // IRQ monitor (agent-shaped BFM, not Accellera UVM).
 // Counts one-cycle pulses on irq_rx.
 

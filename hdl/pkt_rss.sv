@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Khadem Ullah
+
 // NIC RSS: Microsoft Toeplitz. IPv4 4-tuple (12 B) or 2-tuple (8 B);
 // IPv6 4-tuple (36 B) or 2-tuple (32 B). Same 40-byte key as dpi/pcap_reader.c.
 

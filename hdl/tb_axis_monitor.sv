@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (c) 2026 Khadem Ullah
+
 // AXIS RX monitor (agent-shaped BFM, not Accellera UVM).
 // Does not drive the bus. Counts beats and tlast handshakes.
 

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (c) 2026 Khadem Ullah
+
 """Build a tiny Ethernet pcap for parser/CI gates (ARP, IPv4 TCP, VXLAN, runt, IPv6 TCP, 802.1Q IPv4, 802.1Q IPv6).
 
 Uses the Python stdlib only so CI does not need Scapy. Output is local
